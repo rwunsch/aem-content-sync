@@ -1,0 +1,29 @@
+{
+  "_comment": "Deploy-time default config. The UI overrides this at runtime (stored in I/O State). Replace the YOUR_* placeholders, or just configure everything in the app's Configure tab. Env pair (programId/sourceEnvId/destEnvId) is per-job. Content sets are author-tier only; each carries a publish flag (default true) — publish paths are derived from the sets, no separate publishPaths list. Do not commit secrets here.",
+  "stuckFlowThresholdHours": 8,
+  "jobs": [
+    {
+      "id": "weekly-full",
+      "name": "Weekly full sync",
+      "enabled": false,
+      "schedule": "0 20 * * 5",
+      "programId": "YOUR_PROGRAM_ID",
+      "sourceEnvId": "YOUR_SOURCE_ENV_ID",
+      "destEnvId": "YOUR_DEST_ENV_ID",
+      "contentSets": [
+        { "id": "YOUR_CONTENT_SET_ID", "path": "/content/dam", "wipeDestination": false, "publish": true }
+      ],
+      "publish": {
+        "mode": "treeActivation",
+        "targets": ["publish"],
+        "onlyActivated": true,
+        "onlyModified": false,
+        "includeChildren": true
+      }
+    }
+  ],
+  "notifications": {
+    "channel": "#content-sync-alerts",
+    "mentionOnFailure": "@here"
+  }
+}

@@ -1,0 +1,9 @@
+# Experience Cloud Shell extension. Running as a dx/excshell/1 extension (rather
+# than a standalone `application`) is what lets the shell at experience.adobe.com
+# load the SPA in an iframe and inject the user's IMS token — the prerequisite
+# for the require-adobe-auth gated actions to be callable from the UI.
+#
+# The full manifest (actions, web, triggers, rules) lives in ext.config.yaml.
+extensions:
+  dx/excshell/1:
+    $include: ext.config.yaml

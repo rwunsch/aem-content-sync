@@ -1,0 +1,31 @@
+# Secrets & credentials — NEVER commit
+.env
+.env.*
+!.env.example
+.aio
+# Temporary AWS credentials (I/O State / Files SDK)
+.aws.tmp.creds.json
+*.tmp.creds.json
+# Adobe Developer Console credential exports (client secrets, namespace keys)
+AemContentSync-*.json
+*Server-to-Server*.json
+*-Stage.json
+*-Production.json
+dist/dev-keys/
+
+# Generated at build time (contains environment-specific action URLs)
+web-src/src/config.json
+
+# Build output & deps
+node_modules/
+dist/
+dist-web/
+.parcel-cache/
+**/.parcel-cache/
+coverage/
+
+# Editor / OS / misc
+.vscode/
+.DS_Store
+*.log
+*.legacy-bak

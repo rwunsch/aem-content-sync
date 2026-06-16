@@ -1,0 +1,79 @@
+# dx/excshell/1 extension manifest.
+#
+# Declaring the app as an Experience Cloud Shell extension (not a standalone
+# `application`) is what makes the shell at experience.adobe.com treat it as a
+# custom app: it loads the SPA in an iframe and performs the IMS token/org
+# handshake via @adobe/exc-app. Standalone `application` apps are headless and
+# never receive that handshake — which is why the shell timed out (408) and the
+# SPA fell back to a token-less render (401 on every call).
+#
+# The package name stays `aem-content-sync`, so deployed action paths
+# (aem-content-sync/orchestrator, aem-content-sync/ui-api), the self-chain, the
+# ui-api → orchestrator trigger, and the scheduler rule are all unchanged.
+operations:
+  view:
+    - type: web
+      impl: index.html
+actions: actions
+web: web-src
+runtimeManifest:
+  packages:
+    aem-content-sync:
+      license: Apache-2.0
+      actions:
+        orchestrator:
+          function: actions/orchestrator/index.js
+          # Non-web: NO externally reachable URL. Invoked only from inside the
+          # namespace — by the scheduler rule, by ui-api's `trigger` op, and by
+          # its own self-chain, all via the authenticated namespace API.
+          web: 'no'
+          runtime: nodejs:18
+          inputs:
+            LOG_LEVEL: debug
+            IMS_ORG_ID: $IMS_ORG_ID
+            CM_CLIENT_ID: $CM_CLIENT_ID
+            CM_CLIENT_SECRET: $CM_CLIENT_SECRET
+            CM_TECHNICAL_ACCOUNT_ID: $CM_TECHNICAL_ACCOUNT_ID
+            CM_PRIVATE_KEY: $CM_PRIVATE_KEY
+            AEM_AUTHOR_URL: $AEM_AUTHOR_URL
+            AEM_TOKEN: $AEM_TOKEN
+            AEM_USER: $AEM_BASIC_USER
+            AEM_PASSWORD: $AEM_BASIC_PASSWORD
+            AEM_SOURCE_SERVICE_CREDS: $AEM_SOURCE_SERVICE_CREDS
+            AEM_DEST_SERVICE_CREDS: $AEM_DEST_SERVICE_CREDS
+            SLACK_WEBHOOK_URL: $SLACK_WEBHOOK_URL
+          annotations:
+            require-adobe-auth: false
+            final: true
+
+        ui-api:
+          function: actions/ui-api/index.js
+          web: 'yes'
+          runtime: nodejs:18
+          inputs:
+            LOG_LEVEL: debug
+            IMS_ORG_ID: $IMS_ORG_ID
+            CM_CLIENT_ID: $CM_CLIENT_ID
+            CM_CLIENT_SECRET: $CM_CLIENT_SECRET
+            CM_TECHNICAL_ACCOUNT_ID: $CM_TECHNICAL_ACCOUNT_ID
+            AEM_AUTHOR_URL: $AEM_AUTHOR_URL
+            AEM_TOKEN: $AEM_TOKEN
+            SLACK_WEBHOOK_URL: $SLACK_WEBHOOK_URL
+          annotations:
+            require-adobe-auth: true
+            final: true
+
+      # Scheduler tick: every 15 min. The orchestrator evaluates each job's own
+      # cron and runs due jobs one at a time.
+      triggers:
+        scheduler-alarm:
+          feed: /whisk.system/alarms/alarm
+          inputs:
+            cron: "*/15 * * * *"
+            trigger_payload:
+              source: cron
+
+      rules:
+        scheduler-rule:
+          trigger: scheduler-alarm
+          action: aem-content-sync/orchestrator
