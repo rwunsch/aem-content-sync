@@ -182,6 +182,58 @@ healthy — the SPA uses POST, so test with POST.)
 
 ---
 
+## 9. `aio app use` doesn't populate the app's `CM_*` / `IMS_ORG_ID` action inputs
+
+**Symptom:** after switching workspaces with `aio app use` (e.g. Stage → Production),
+the deployed actions can't reach Cloud Manager — `getCMToken` throws *"Cloud Manager
+OAuth credentials are not configured"* or IMS returns `invalid_client`. `.env` has the
+`AIO_ims_contexts_<context>_*` lines but `IMS_ORG_ID` / `CM_CLIENT_ID` / `CM_CLIENT_SECRET`
+are empty.
+
+**Root cause:** `aio app use` writes the **IMS S2S context** (`AIO_ims_contexts_…_client__id`,
+`…_client__secrets`, `…_ims__org__id`, …) but **not** the app-specific convenience vars the
+manifest passes as action inputs (`IMS_ORG_ID`, `CM_CLIENT_ID`, `CM_CLIENT_SECRET`). Those were
+added manually in the original workspace and don't carry across. Also, the secret is stored as a
+**bracketed array** (`client__secrets=[p8e-…]`) — the brackets must be stripped.
+
+**Fix:** derive the convenience vars from the context lines, then **redeploy**:
+
+```
+IMS_ORG_ID       = AIO_ims_contexts_<ctx>_ims__org__id
+CM_CLIENT_ID     = AIO_ims_contexts_<ctx>_client__id
+CM_CLIENT_SECRET = AIO_ims_contexts_<ctx>_client__secrets   # strip surrounding [ ]
+```
+
+Verify before redeploy with a `client_credentials` call to
+`https://ims-na1.adobelogin.com/ims/token/v3` — a 200 with an `access_token` means the
+credential is good; `invalid_client` usually means the brackets weren't stripped.
+
+---
+
+## 10. Content Copy 403 — CM credential lacks Deployment Manager on the **target program**
+
+**Symptom:** listing programs/environments/content-sets works, but starting a run fails:
+
+```
+FATAL: [CloudManagerSDK:ERROR_CREATE_CONTENTFLOW] … (403 Forbidden) — User unauthorized.
+User does not have the necessary permissions for this operation.
+```
+
+**Root cause:** `createContentFlow` (Content Copy) requires the credential's **technical
+account** to hold the **Deployment Manager** role **on that specific program**. Read scopes
+(list programs) are broad and succeed; the copy is a privileged, *program-scoped* operation.
+A newly-created workspace's S2S credential is **not** automatically a Deployment Manager on
+pre-existing programs — even if you attached the Deployment Manager product profile to the
+credential, the program's Cloud Manager team membership is separate.
+
+**Fix:** in the **Admin Console / Cloud Manager**, add the credential's technical account
+(`AIO_ims_contexts_<ctx>_technical__account__email`) to the **target program's** team with the
+**Deployment Manager** role (or assign the product profile that grants Deployment Manager scoped
+to that program). Allow ~10–30 min to propagate, then re-run. Listing working while copy 403s is
+the tell-tale that it's a program-level role gap, not a bad credential.
+
+---
+
 ## Security posture (kept throughout)
 
 - `ui-api` is a web action with `require-adobe-auth: true` → anonymous calls get
