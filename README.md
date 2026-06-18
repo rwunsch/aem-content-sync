@@ -237,6 +237,11 @@ workspace and publish it. This is a deliberate, partly-manual step:
 1. **Production workspace must be set up first.** In Developer Console, the Production
    workspace needs its **own** OAuth Server-to-Server credential and the same APIs as Stage
    (Cloud Manager, I/O Management, State). It has a **separate runtime namespace** from Stage.
+   **Also (easy to miss):** the credential's Cloud Manager *Deployment Manager* profile is **not
+   enough** for Content Copy — in the **Admin Console** you must add the credential to the
+   `AEM Administrators – author – Program <id> – Environment <id>` product profile for **both**
+   the source and destination environments, or `createContentFlow` returns **403** (listing still
+   works). See `docs/troubleshooting-shell-integration.md` §10.
 2. **Switch local context to Production:**
    ```bash
    aio app use   # select the Production workspace  (or: aio console workspace select Production && aio app use)

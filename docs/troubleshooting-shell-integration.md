@@ -219,18 +219,27 @@ FATAL: [CloudManagerSDK:ERROR_CREATE_CONTENTFLOW] … (403 Forbidden) — User u
 User does not have the necessary permissions for this operation.
 ```
 
-**Root cause:** `createContentFlow` (Content Copy) requires the credential's **technical
-account** to hold the **Deployment Manager** role **on that specific program**. Read scopes
-(list programs) are broad and succeed; the copy is a privileged, *program-scoped* operation.
-A newly-created workspace's S2S credential is **not** automatically a Deployment Manager on
-pre-existing programs — even if you attached the Deployment Manager product profile to the
-credential, the program's Cloud Manager team membership is separate.
+**Root cause:** the Cloud Manager **Deployment Manager – Cloud Service** product profile on the
+credential is **necessary but not sufficient** for Content Copy. The copy is a privileged,
+*environment-scoped* operation, and the API credential **also** needs the AEM environment's
+**`AEM Administrators – author – Program <id> – Environment <id>`** product profile (assigned in
+the **Admin Console**, under that product profile's **API credentials** tab). Read calls (list
+programs/environments/content-sets) succeed with the Cloud Manager profile alone; only the actual
+`createContentFlow` checks the AEM-environment profile — which is why **listing works but the copy
+403s**. A new workspace's S2S credential has the Cloud Manager profile but is **not** automatically
+added to the per-environment AEM Administrators profile, so it must be added explicitly.
 
-**Fix:** in the **Admin Console / Cloud Manager**, add the credential's technical account
-(`AIO_ims_contexts_<ctx>_technical__account__email`) to the **target program's** team with the
-**Deployment Manager** role (or assign the product profile that grants Deployment Manager scoped
-to that program). Allow ~10–30 min to propagate, then re-run. Listing working while copy 403s is
-the tell-tale that it's a program-level role gap, not a bad credential.
+> Verified empirically: at the Cloud Manager API level the Stage and Production credentials had
+> *identical* profiles (Deployment Manager + Developer – Cloud Service); the only difference was
+> that Stage's credential was a member of `AEM Administrators – author – Program 127553 –
+> Environment 1512873` and Production's was not. Adding the Production credential there fixed it.
+
+**Fix:** in the **Admin Console → Products →** the `AEM Administrators – author – Program <id> –
+Environment <id>` product profile **→ API credentials → Add API credentials**, add the
+credential (named `<…> - <Workspace>`, e.g. `Robert Wunsch - aem content sync - Production`).
+Do this for **every environment the job touches** — both the **source** (read) and **destination**
+(write) environments. Allow ~10–30 min to propagate, then re-run. Listing working while the copy
+403s is the tell-tale that the AEM-environment profile is the missing piece, not the credential.
 
 ---
 
