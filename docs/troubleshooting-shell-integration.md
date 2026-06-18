@@ -145,6 +145,43 @@ Parcel set.
 
 ---
 
+## 8. Fresh workspace: `require-adobe-auth` wrapper sequence not created → "backend unreachable"
+
+**Symptom:** after publishing the app to a **new** workspace (e.g. promoting to a
+**Production** workspace for the first time) the SPA loads in the shell but every
+backend call fails with **"Failed to fetch" / "backend unreachable."** A direct
+`curl` of the action's web URL returns **HTTP 404** (not 401):
+
+```
+POST https://<ns>.adobeioruntime.net/api/v1/web/<pkg>/ui-api   → 404
+```
+
+**Root cause:** `require-adobe-auth: true` works by deploying the action renamed
+`__secured_<name>` **and** creating a web **sequence** `<name>` =
+`[/adobeio/shared-validators-v1/app-registry, <pkg>/__secured_<name>]`. On a fresh
+namespace `aio app deploy` sometimes creates only the inner `__secured_ui-api` and
+**skips the `ui-api` wrapper sequence** (the app-registry validator wiring depends
+on the just-published app being fully propagated). With no `ui-api` route, the
+SPA's POST hits nothing → 404 → the UI reports the backend as unreachable. Confirm
+with `aio rt action list`: you'll see `__secured_ui-api` but **no** `ui-api`.
+
+**Fix:** create the wrapper sequence manually to match a known-good workspace:
+
+```bash
+aio rt action update <pkg>/ui-api \
+  --sequence /adobeio/shared-validators-v1/app-registry,<pkg>/__secured_ui-api \
+  --web true -a final true -a raw-http false -a require-adobe-auth false
+```
+
+**Verify:** an anonymous **POST** to the web URL should now return **401** (the
+validator rejecting the missing token) instead of 404 — the same response a
+working workspace gives. A real IMS token from the shell then passes through.
+Note a **full** `aio app deploy` may drop the sequence again; re-run the command
+if "backend unreachable" returns after a redeploy. (A `GET` returns 404 even when
+healthy — the SPA uses POST, so test with POST.)
+
+---
+
 ## Security posture (kept throughout)
 
 - `ui-api` is a web action with `require-adobe-auth: true` → anonymous calls get

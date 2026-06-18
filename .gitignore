@@ -29,3 +29,6 @@ coverage/
 .DS_Store
 *.log
 *.legacy-bak
+
+# local workspace credential backups (contain secrets)
+.workspace-backups/
