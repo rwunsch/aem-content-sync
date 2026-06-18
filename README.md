@@ -248,6 +248,15 @@ workspace and publish it. This is a deliberate, partly-manual step:
 4. **The Production app starts unconfigured** — it has its own namespace/state, so set up jobs
    (Configure) and per-environment Service Credentials (Settings) **again** there, independent
    of Stage. Access-control profiles also default fresh (Deployment + Program Managers).
+> **Fresh-namespace gotcha (auto-healed):** on the *first* deploy to a brand-new namespace,
+> `aio app deploy` can create the inner `__secured_ui-api` action but **skip the
+> `require-adobe-auth` `ui-api` wrapper sequence** — leaving the SPA's calls 404ing and the UI
+> reporting the backend as *unreachable*. This repo ships a `post-app-deploy` hook
+> (`scripts/ensure-auth-sequence.js`, wired in `ext.config.yaml`) that runs after every deploy
+> and idempotently (re)creates the wrapper if missing. If you ever see "backend unreachable"
+> on a fresh workspace, just re-run `aio app deploy` (or `node scripts/ensure-auth-sequence.js`).
+> See `docs/troubleshooting-shell-integration.md` §8.
+
 5. **Submit for publishing:** Developer Console → **Production workspace → Submit for approval**
    → fill the submission form → **Submit**.
 6. **Org admin approves:** an organization **administrator** approves it in **Adobe Exchange →

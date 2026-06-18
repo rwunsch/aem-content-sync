@@ -16,6 +16,13 @@ operations:
       impl: index.html
 actions: actions
 web: web-src
+# Self-healing: on a fresh namespace (first Production publish) aio app deploy can
+# create __secured_ui-api but skip the require-adobe-auth `ui-api` wrapper
+# sequence, leaving the backend unreachable (404). This hook (re)creates the
+# wrapper after every deploy if it's missing. See
+# docs/troubleshooting-shell-integration.md §8.
+hooks:
+  post-app-deploy: node scripts/ensure-auth-sequence.js
 runtimeManifest:
   packages:
     aem-content-sync:
