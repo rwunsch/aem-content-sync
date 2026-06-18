@@ -243,6 +243,27 @@ Do this for **every environment the job touches** — both the **source** (read)
 
 ---
 
+## 11. After a permission change, redeploy to pick up a fresh token
+
+**Symptom:** you granted (or removed) an Admin Console role / product profile for the API
+credential, waited for propagation, but the deployed action's behaviour doesn't change — e.g.
+Content Copy still returns 403 even though the AEM Administrators profile is now assigned.
+
+**Root cause:** the action obtains a Cloud Manager token via `client_credentials` and **caches it
+in module memory** (`auth.js`), valid for the token lifetime (~24 h, refreshed ~10 min before
+expiry). IMS bakes the credential's entitlements into the token **at mint time**. A warm action
+container therefore keeps using a token minted *before* the permission change — with the old
+entitlements — until that token expires or the container is recycled.
+
+**Fix:** run `aio app deploy`. Deploying a new action version means the next invocation runs in a
+**fresh container** that mints a **new token**, which reflects the updated entitlements
+immediately. (Equivalently, wait for the cached token to expire, but redeploy is deterministic.)
+
+**Rule of thumb:** any Admin Console role/profile change that affects the credential ⇒ wait for
+propagation, then `aio app deploy`, then retry.
+
+---
+
 ## Security posture (kept throughout)
 
 - `ui-api` is a web action with `require-adobe-auth: true` → anonymous calls get

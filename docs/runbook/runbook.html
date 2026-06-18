@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>AEM Content Sync — Deployment &amp; Publishing Runbook</title>
+<link rel="stylesheet" href="style.css">
+</head><body>
+
+<!-- ============ COVER ============ -->
+<section class="cover">
+  <div class="brandbar"></div>
+  <div class="logo"><span class="a">◆</span> AEM Content Sync</div>
+  <div class="kicker">Deployment &amp; Operations Runbook</div>
+  <div class="spacer"></div>
+  <h1>Deployment&nbsp;&amp;&nbsp;Publishing<br>Runbook</h1>
+  <div class="sub">Install, deploy, wire the permissions, promote to a Production workspace, and publish the App Builder app to your organization's catalog — for AEM as a Cloud Service.</div>
+  <div class="spacer"></div>
+  <div class="meta">
+    <div><div class="k">Project</div><div class="v">AEM Content Sync</div></div>
+    <div><div class="k">Repository</div><div class="v">github.com/rwunsch/aem-content-sync</div></div>
+    <div><div class="k">App type</div><div class="v">App Builder · dx/excshell/1</div></div>
+    <div><div class="k">License</div><div class="v">Apache-2.0</div></div>
+  </div>
+</section>
+
+<!-- ============ 1. OVERVIEW ============ -->
+<section class="section">
+<h2>1 · What this is</h2>
+<p class="lead">The Content Sync app wraps Cloud Manager's <strong>Content Copy</strong> in a scheduled, observable, role-gated pipeline that keeps a lower environment (Stage) aligned with Production — including the <em>published</em> state, which Content Copy alone does not carry across.</p>
+<p>It is an Adobe <strong>App Builder</strong> application (a <code>dx/excshell/1</code> Experience Cloud Shell extension) with a React SPA front end and Adobe I/O Runtime actions behind it. It runs entirely on Adobe infrastructure; there are no customer-hosted servers.</p>
+
+<div class="figure">
+<svg viewBox="0 0 720 250" xmlns="http://www.w3.org/2000/svg" font-family="Helvetica,Arial,sans-serif" font-size="12">
+  <rect x="10" y="20" width="200" height="210" rx="8" fill="#fbf2f1" stroke="#EB1000"/>
+  <text x="110" y="44" text-anchor="middle" font-weight="bold" fill="#B30B00">App Builder (Adobe I/O)</text>
+  <rect x="30" y="58" width="160" height="40" rx="5" fill="#fff" stroke="#999"/><text x="110" y="83" text-anchor="middle">React SPA (UI)</text>
+  <rect x="30" y="108" width="160" height="40" rx="5" fill="#fff" stroke="#999"/><text x="110" y="133" text-anchor="middle">ui-api (gated)</text>
+  <rect x="30" y="158" width="160" height="40" rx="5" fill="#fff" stroke="#999"/><text x="110" y="178" text-anchor="middle">orchestrator</text>
+  <text x="110" y="192" text-anchor="middle" font-size="9" fill="#666">+ scheduler (cron */15)</text>
+
+  <rect x="290" y="55" width="180" height="70" rx="8" fill="#eef5fe" stroke="#1473e6"/>
+  <text x="380" y="80" text-anchor="middle" font-weight="bold" fill="#1473e6">Cloud Manager API</text>
+  <text x="380" y="100" text-anchor="middle" font-size="10">Content Copy · programs ·</text>
+  <text x="380" y="114" text-anchor="middle" font-size="10">environments · content sets</text>
+
+  <rect x="540" y="20" width="170" height="95" rx="8" fill="#edf8f0" stroke="#2d9d4f"/>
+  <text x="625" y="44" text-anchor="middle" font-weight="bold" fill="#2d9d4f">AEM Author — PROD</text>
+  <text x="625" y="66" text-anchor="middle" font-size="10">QueryBuilder: read the</text>
+  <text x="625" y="80" text-anchor="middle" font-size="10">activated (published) set</text>
+
+  <rect x="540" y="135" width="170" height="95" rx="8" fill="#edf8f0" stroke="#2d9d4f"/>
+  <text x="625" y="159" text-anchor="middle" font-weight="bold" fill="#2d9d4f">AEM Author — STAGE</text>
+  <text x="625" y="181" text-anchor="middle" font-size="10">/bin/replicate: activate</text>
+  <text x="625" y="195" text-anchor="middle" font-size="10">exactly that set</text>
+
+  <line x1="210" y1="128" x2="290" y2="95" stroke="#666" marker-end="url(#a)"/>
+  <line x1="470" y1="80" x2="540" y2="67" stroke="#666" marker-end="url(#a)"/>
+  <text x="500" y="60" font-size="9" fill="#666">copy</text>
+  <line x1="210" y1="178" x2="540" y2="80"  stroke="#2d9d4f" stroke-dasharray="4 3" marker-end="url(#b)"/>
+  <line x1="210" y1="178" x2="540" y2="182" stroke="#2d9d4f" stroke-dasharray="4 3" marker-end="url(#b)"/>
+  <text x="350" y="150" font-size="9" fill="#2d9d4f">read prod-mirror set / write stage</text>
+  <defs>
+    <marker id="a" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#666"/></marker>
+    <marker id="b" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#2d9d4f"/></marker>
+  </defs>
+</svg>
+<div class="cap">Figure 1 — The app holds both environments' credentials and talks to Cloud Manager (copy) and each AEM author (prod-mirror publish) directly.</div>
+</div>
+
+<h3>Why "prod-mirror" publishing</h3>
+<p>Cloud Manager Content Copy is <strong>author-tier only</strong> and <strong>strips replication status</strong> (<code>cq:lastReplicated*</code>, <code>cq:lastReplicationAction*</code>, <code>cq:lastReplicatedBy*</code>) — by design, because that metadata describes the <em>source's</em> publish tier. So after a copy the destination author has no record of what was published, and nothing is published on Stage. The app's <strong>prod-mirror</strong> mode reads Production's activated set (QueryBuilder, per agent: publish/preview) and replicates exactly that set on Stage — reproducing production's live published state every run.</p>
+</section>
+
+<!-- ============ 2. PERMISSIONS ============ -->
+<section class="section pagebreak">
+<h2>2 · The permission model (read this first)</h2>
+<p class="lead">Three independent authorization concerns, each granted in a different place. Getting one wrong fails in a different way — so understand them before you start.</p>
+
+<div class="figure">
+<svg viewBox="0 0 720 360" xmlns="http://www.w3.org/2000/svg" font-family="Helvetica,Arial,sans-serif" font-size="11.5">
+  <!-- A: user access -->
+  <rect x="10" y="15" width="700" height="95" rx="8" fill="#eef5fe" stroke="#1473e6"/>
+  <text x="24" y="36" font-weight="bold" fill="#1473e6">A · Who can OPEN the app  (authentication + authorization of the human)</text>
+  <rect x="24" y="46" width="210" height="52" rx="5" fill="#fff" stroke="#999"/><text x="129" y="68" text-anchor="middle">require-adobe-auth</text><text x="129" y="84" text-anchor="middle" font-size="9" fill="#666">valid IMS token · same org</text>
+  <rect x="250" y="46" width="210" height="52" rx="5" fill="#fff" stroke="#999"/><text x="355" y="68" text-anchor="middle">Product entitlement</text><text x="355" y="84" text-anchor="middle" font-size="9" fill="#666">Cloud Manager profile</text>
+  <rect x="476" y="46" width="220" height="52" rx="5" fill="#fff" stroke="#999"/><text x="586" y="64" text-anchor="middle">In-app profile gate</text><text x="586" y="80" text-anchor="middle" font-size="9" fill="#666">authz.js → Deployment /</text><text x="586" y="92" text-anchor="middle" font-size="9" fill="#666">Program Manager</text>
+
+  <!-- B: CM credential -->
+  <rect x="10" y="125" width="345" height="210" rx="8" fill="#fbf2f1" stroke="#EB1000"/>
+  <text x="24" y="146" font-weight="bold" fill="#B30B00">B · Cloud Manager — control plane</text>
+  <text x="24" y="164" font-size="10" fill="#444">OAuth Server-to-Server credential (per workspace)</text>
+  <rect x="24" y="174" width="317" height="44" rx="5" fill="#fff" stroke="#999"/><text x="32" y="192" font-size="10">Profile: <tspan font-weight="bold">Deployment Manager – Cloud Service</tspan></text><text x="32" y="208" font-size="9" fill="#666">→ start Content Copy (createContentFlow)</text>
+  <rect x="24" y="224" width="317" height="40" rx="5" fill="#fff" stroke="#999"/><text x="32" y="242" font-size="10">Profile: <tspan font-weight="bold">Developer – Cloud Service</tspan></text><text x="32" y="257" font-size="9" fill="#666">→ list programs / envs / content sets (read)</text>
+  <rect x="24" y="270" width="317" height="52" rx="5" fill="#fff5f4" stroke="#EB1000"/><text x="32" y="288" font-size="10" font-weight="bold" fill="#B30B00">AEM Administrators – author –</text><text x="32" y="302" font-size="10" font-weight="bold" fill="#B30B00">Program &lt;id&gt; – Environment &lt;id&gt;</text><text x="32" y="316" font-size="9" fill="#666">REQUIRED for the copy · per env (source + dest)</text>
+
+  <!-- C: AEM credential -->
+  <rect x="365" y="125" width="345" height="210" rx="8" fill="#edf8f0" stroke="#2d9d4f"/>
+  <text x="379" y="146" font-weight="bold" fill="#2d9d4f">C · AEM author — data plane</text>
+  <text x="379" y="164" font-size="10" fill="#444">Developer Console Service Credentials (JWT), per environment</text>
+  <rect x="379" y="174" width="317" height="60" rx="5" fill="#fff" stroke="#999"/><text x="387" y="194" font-size="10">JWT → exchange for AEM token</text><text x="387" y="210" font-size="9" fill="#666">/bin/querybuilder.json (read PROD activated set)</text><text x="387" y="224" font-size="9" fill="#666">/bin/replicate.json (activate on STAGE)</text>
+  <rect x="379" y="244" width="317" height="78" rx="5" fill="#fff" stroke="#999"/><text x="387" y="263" font-size="10" font-weight="bold">Stored in the app's I/O State</text><text x="387" y="279" font-size="9" fill="#666">configured in Settings · keyed by env id</text><text x="387" y="295" font-size="9" fill="#666">NOT in Developer Console / .env</text><text x="387" y="311" font-size="9" fill="#666">classic /bin/* reject the CM token (403)</text>
+</svg>
+<div class="cap">Figure 2 — How the permissions fit together. <strong>B</strong> drives Cloud Manager (the copy); <strong>C</strong> drives the AEM authors (the prod-mirror publish); <strong>A</strong> controls who may open the app at all.</div>
+</div>
+
+<div class="callout warn"><span class="t">The one that bites everyone</span>
+The Cloud Manager <em>Deployment Manager</em> profile is <strong>necessary but not sufficient</strong> for Content Copy. The API credential must <strong>also</strong> be a member of the <code>AEM Administrators – author – Program &lt;id&gt; – Environment &lt;id&gt;</code> product profile, for <strong>both</strong> the source and destination environments. Read calls succeed without it; only <code>createContentFlow</code> checks it — so the classic symptom is <em>"listing works but the copy returns 403."</em></div>
+
+<h3>The two-token model</h3>
+<table>
+<tr><th>Token</th><th>How it's obtained</th><th>Used for</th></tr>
+<tr><td><strong>Cloud Manager</strong> token</td><td><code>client_credentials</code> grant at <code>ims/token/v3</code>, using the S2S client id + secret</td><td>Cloud Manager API — copy, programs, environments, content sets</td></tr>
+<tr><td><strong>AEM author</strong> token</td><td>signed <strong>JWT</strong> exchanged at <code>ims/exchange/jwt</code>, using the per-environment Service Credentials</td><td>Classic AEM <code>/bin/replicate</code> &amp; <code>/bin/querybuilder</code> (prod-mirror publish)</td></tr>
+</table>
+</section>
+
+<!-- ============ 3. SETUP STEPS ============ -->
+<section class="section pagebreak">
+<h2>3 · Step-by-step — Stage</h2>
+
+<div class="step"><div class="n">1</div><div class="body"><h4>Developer Console project &amp; workspace</h4>
+<p>Create (or open) the App Builder project. It has a <strong>Stage</strong> workspace by default; you'll add <strong>Production</strong> later (§5). Add the APIs the app needs: <strong>Cloud Manager</strong>, <strong>I/O Management</strong>, <strong>State</strong>.</p></div></div>
+
+<div class="step"><div class="n">2</div><div class="body"><h4>Cloud Manager credential + profiles</h4>
+<p>On the workspace, add an <strong>OAuth Server-to-Server</strong> credential to the Cloud Manager API and attach the product profiles <strong>Deployment Manager – Cloud Service</strong> and <strong>Developer – Cloud Service</strong> (Figure 2-B).</p></div></div>
+
+<div class="step"><div class="n">3</div><div class="body"><h4>AEM Administrators profile — per environment <span class="pill warn">easy to miss</span></h4>
+<p>In the <strong>Admin Console</strong>, add this same API credential to the <code>AEM Administrators – author – Program &lt;id&gt; – Environment &lt;id&gt;</code> product profile for <strong>both</strong> the source and destination environments (Products → that profile → <em>API credentials</em> → <em>Add API credentials</em>). Allow ~10–30 min to propagate.</p></div></div>
+
+<div class="step"><div class="n">4</div><div class="body"><h4>Pull config &amp; deploy</h4>
+<pre><span class="c"># project-local aio (matching Parcel) — always use ./node_modules/.bin/aio</span>
+npm install
+aio app use            <span class="c"># select the Stage workspace; writes .aio + .env</span>
+aio app deploy         <span class="c"># builds SPA + actions, deploys, publishes the extension</span></pre>
+<p>The deploy prints the in-shell URL. Open it via the Experience Cloud Shell — never the raw <code>adobeio-static.net</code> URL (the shell injects the IMS token the gated actions need).</p></div></div>
+
+<div class="step"><div class="n">5</div><div class="body"><h4>Map the credential into action inputs</h4>
+<p><code>aio app use</code> writes the IMS S2S <em>context</em> but <strong>not</strong> the convenience vars the actions read. Set them in <code>.env</code> from the context values (strip the brackets on the secret), then redeploy:</p>
+<pre>IMS_ORG_ID       = AIO_ims_contexts_&lt;ctx&gt;_ims__org__id
+CM_CLIENT_ID     = AIO_ims_contexts_&lt;ctx&gt;_client__id
+CM_CLIENT_SECRET = AIO_ims_contexts_&lt;ctx&gt;_client__secrets   <span class="c"># strip [ ]</span></pre></div></div>
+
+<div class="step"><div class="n">6</div><div class="body"><h4>Configure jobs &amp; AEM credentials in the app</h4>
+<p>Open the app → <strong>Settings</strong>: paste each environment's AEM <strong>Service Credentials</strong> JSON (Figure 2-C). → <strong>Configure</strong>: pick the program, source→destination environments, content set(s), publish mode (<strong>prod-mirror</strong>), and the cron schedule. → <strong>Access control</strong>: confirm the allowed Admin Console profiles (default: Deployment + Program Manager).</p></div></div>
+</section>
+
+<!-- ============ 4. PRODUCTION + PUBLISH ============ -->
+<section class="section pagebreak">
+<h2>4 · Promote to Production &amp; publish to the catalog</h2>
+<div class="figure">
+<svg viewBox="0 0 720 150" xmlns="http://www.w3.org/2000/svg" font-family="Helvetica,Arial,sans-serif" font-size="10.5">
+  <g>
+  <rect x="6"  y="45" width="120" height="56" rx="6" fill="#fff" stroke="#EB1000"/><text x="66" y="68" text-anchor="middle">aio app use</text><text x="66" y="84" text-anchor="middle" font-size="9" fill="#666">→ Production</text>
+  <rect x="150" y="45" width="120" height="56" rx="6" fill="#fff" stroke="#EB1000"/><text x="210" y="68" text-anchor="middle">set CM vars</text><text x="210" y="84" text-anchor="middle" font-size="9" fill="#666">+ AEM Admin prof.</text>
+  <rect x="294" y="45" width="120" height="56" rx="6" fill="#fff" stroke="#EB1000"/><text x="354" y="68" text-anchor="middle">aio app deploy</text><text x="354" y="84" text-anchor="middle" font-size="9" fill="#666">+ auth-seq hook</text>
+  <rect x="438" y="45" width="130" height="56" rx="6" fill="#fff" stroke="#EB1000"/><text x="503" y="64" text-anchor="middle">Submit for</text><text x="503" y="80" text-anchor="middle">approval</text>
+  <rect x="592" y="45" width="122" height="56" rx="6" fill="#edf8f0" stroke="#2d9d4f"/><text x="653" y="64" text-anchor="middle" font-weight="bold" fill="#2d9d4f">Approve</text><text x="653" y="80" text-anchor="middle" font-size="9" fill="#666">in Exchange</text>
+  <line x1="126" y1="73" x2="150" y2="73" stroke="#999" marker-end="url(#f)"/>
+  <line x1="270" y1="73" x2="294" y2="73" stroke="#999" marker-end="url(#f)"/>
+  <line x1="414" y1="73" x2="438" y2="73" stroke="#999" marker-end="url(#f)"/>
+  <line x1="568" y1="73" x2="592" y2="73" stroke="#999" marker-end="url(#f)"/>
+  <text x="360" y="125" text-anchor="middle" font-size="9" fill="#666">Developer Console (workspace = Production)  ·············▶  Adobe Exchange (org admin)</text>
+  <defs><marker id="f" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#999"/></marker></defs>
+  </g>
+</svg>
+<div class="cap">Figure 3 — Production promotion and catalog publish flow.</div>
+</div>
+
+<div class="step"><div class="n">1</div><div class="body"><h4>Switch the project to Production</h4>
+<pre>aio app use -w Production --overwrite --no-input   <span class="c"># rewrites .env/.aio to the Production namespace</span></pre>
+<div class="callout info"><span class="t">Back up first</span>Switching <strong>overwrites</strong> the local <code>.env</code>/<code>.aio</code>. Copy them aside so you can return to Stage dev with <code>aio app use -w Stage</code>.</div>
+<p>Production needs its <strong>own</strong> Cloud Manager S2S credential and — as in §3 steps 2–3 — the <strong>Deployment Manager</strong> profile <em>and</em> the per-environment <strong>AEM Administrators</strong> profiles. Re-map the CM convenience vars (§3 step 5) for the Production credential.</p></div></div>
+
+<div class="step"><div class="n">2</div><div class="body"><h4>Deploy to Production</h4>
+<pre>aio app deploy</pre>
+<div class="callout warn"><span class="t">Fresh-namespace gotcha (auto-healed)</span>On a brand-new namespace the deploy can create the inner <code>__secured_ui-api</code> action but skip the <code>require-adobe-auth</code> <code>ui-api</code> <em>wrapper sequence</em> → the SPA's calls 404 → UI shows "backend unreachable." The app ships a <code>post-app-deploy</code> hook (<code>scripts/ensure-auth-sequence.js</code>) that re-creates it automatically after every deploy.</div></div></div>
+
+<div class="step"><div class="n">3</div><div class="body"><h4>Seed the Production app's configuration</h4>
+<p>The Production namespace starts empty. Configure jobs, AEM Service Credentials and access profiles in the app exactly as in §3 step 6 (Production has its own I/O State, independent of Stage).</p></div></div>
+
+<div class="step"><div class="n">4</div><div class="body"><h4>Submit for publishing</h4>
+<p>Developer Console → <strong>Production</strong> workspace → <strong>Approval</strong> → fill the submission form (App title, description, contact email, 512×512 icon, note to reviewer) → <strong>Submit</strong>. Status becomes <em>In Review</em>.</p></div></div>
+
+<div class="step"><div class="n">5</div><div class="body"><h4>Approve (org admin)</h4>
+<p><a href="https://exchange.adobe.com/manage">exchange.adobe.com/manage</a> → <strong>App Builder applications</strong> → <strong>Private</strong> tab → find the app (<em>Pending Review</em>) → <strong>Review</strong> → <strong>Approve</strong>. Status flips to <span class="pill ok">Approved</span>.</p></div></div>
+
+<div class="step"><div class="n">6</div><div class="body"><h4>Result — stable catalog URL</h4>
+<p>The app appears under the org's App Builder Apps with a durable, reloadable URL (no more <code>devMode</code>):</p>
+<pre>https://experience.adobe.com/#/@&lt;org&gt;/custom-apps/&lt;namespace&gt;/</pre>
+<p>End users still need the product entitlement <em>and</em> one of the configured Admin Console profiles (Figure 2-A).</p></div></div>
+</section>
+
+<!-- ============ 5. RUN & MONITOR ============ -->
+<section class="section pagebreak">
+<h2>5 · Run &amp; monitor</h2>
+<p>A run is triggered by the scheduler (cron <code>*/15</code> evaluates each job's own schedule) or manually from the UI. Each run is a small state machine; the orchestrator runs one phase per invocation and self-chains, so no single action exceeds the 60-second I/O Runtime limit.</p>
+<div class="figure">
+<svg viewBox="0 0 720 90" xmlns="http://www.w3.org/2000/svg" font-family="Helvetica,Arial,sans-serif" font-size="10">
+  <g>
+  <rect x="6"   y="30" width="110" height="40" rx="6" fill="#eef5fe" stroke="#1473e6"/><text x="61"  y="54" text-anchor="middle">CHECK_STUCK</text>
+  <rect x="146" y="30" width="110" height="40" rx="6" fill="#fbf2f1" stroke="#EB1000"/><text x="201" y="54" text-anchor="middle">COPYING</text>
+  <rect x="286" y="30" width="120" height="40" rx="6" fill="#edf8f0" stroke="#2d9d4f"/><text x="346" y="54" text-anchor="middle">PUBLISHING</text>
+  <rect x="436" y="30" width="130" height="40" rx="6" fill="#fff" stroke="#999"/><text x="501" y="49" text-anchor="middle">NOTIFYING_</text><text x="501" y="62" text-anchor="middle">SUCCESS</text>
+  <rect x="596" y="30" width="110" height="40" rx="6" fill="#fff" stroke="#999"/><text x="651" y="54" text-anchor="middle">IDLE</text>
+  <line x1="116" y1="50" x2="146" y2="50" stroke="#999" marker-end="url(#g)"/>
+  <line x1="256" y1="50" x2="286" y2="50" stroke="#999" marker-end="url(#g)"/>
+  <line x1="406" y1="50" x2="436" y2="50" stroke="#999" marker-end="url(#g)"/>
+  <line x1="566" y1="50" x2="596" y2="50" stroke="#999" marker-end="url(#g)"/>
+  <defs><marker id="g" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#999"/></marker></defs>
+  </g>
+</svg>
+<div class="cap">Figure 4 — Run state machine. COPYING calls Cloud Manager; PUBLISHING drives the prod-mirror replication; failures route to NOTIFYING_FAILURE → IDLE.</div>
+</div>
+<p>Progress, per-job status and the last ~50 log lines are visible in the UI and persisted in I/O State. Content-flow status from Cloud Manager is <code>IN_PROGRESS / COMPLETED / FAILED / CANCELLED</code>.</p>
+
+<div class="callout"><span class="t">Where to look when something fails</span>
+<strong>403 on the copy</strong> → AEM Administrators per-env profile missing (§2). <strong>"Backend unreachable"</strong> → auth-wrapper sequence (§4 step 2). <strong>401 everywhere</strong> → opened outside the shell, no IMS token. <strong>403 "not authorized: profile"</strong> → caller lacks an allowed Admin Console profile.</p></div>
+</section>
+
+<footer class="docfoot"><span>AEM Content Sync — Deployment &amp; Publishing Runbook</span><span>github.com/rwunsch/aem-content-sync · Apache-2.0</span></footer>
+</body></html>

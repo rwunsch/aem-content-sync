@@ -1,0 +1,87 @@
+/* Adobe Ultimate Success · Field Engineering — deliverable stylesheet */
+:root{
+  --adobe-red:#EB1000;
+  --adobe-red-dark:#B30B00;
+  --ink:#1f1f1f;
+  --ink-soft:#4b4b4b;
+  --muted:#6e6e6e;
+  --line:#e3e3e3;
+  --bg-soft:#f6f6f7;
+  --bg-tint:#fbf2f1;
+  --blue:#1473e6;
+  --green:#2d9d4f;
+  --amber:#d97706;
+  --mono:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;
+  --sans:"Adobe Clean","Helvetica Neue",Helvetica,Arial,sans-serif;
+}
+@page{ size:A4; margin:18mm 16mm 20mm 16mm; }
+*{ box-sizing:border-box; }
+html,body{ margin:0; padding:0; }
+body{
+  font-family:var(--sans); color:var(--ink); font-size:10.5pt; line-height:1.5;
+  -webkit-print-color-adjust:exact; print-color-adjust:exact;
+}
+h1,h2,h3,h4{ line-height:1.2; color:var(--ink); margin:0 0 .4em; font-weight:700; }
+h1{ font-size:24pt; }
+h2{ font-size:16pt; margin-top:1.4em; padding-bottom:.25em; border-bottom:2px solid var(--adobe-red); }
+h3{ font-size:12.5pt; margin-top:1.1em; color:var(--adobe-red-dark); }
+h4{ font-size:11pt; margin-top:.9em; color:var(--ink-soft); }
+p{ margin:.5em 0; }
+a{ color:var(--blue); text-decoration:none; word-break:break-all; }
+code{ font-family:var(--mono); font-size:.86em; background:var(--bg-soft); padding:.08em .35em; border-radius:3px; border:1px solid var(--line); }
+strong{ font-weight:700; }
+ul,ol{ margin:.4em 0 .8em; padding-left:1.4em; }
+li{ margin:.25em 0; }
+
+/* ---- cover ---- */
+.cover{ height:218mm; display:flex; flex-direction:column; page-break-after:always; }
+.cover .brandbar{ height:10px; background:var(--adobe-red); margin:-2mm -2mm 0; }
+.cover .logo{ font-weight:800; font-size:16pt; letter-spacing:.5px; margin-top:24mm; }
+.cover .logo .a{ color:var(--adobe-red); }
+.cover .kicker{ margin-top:2mm; color:var(--muted); font-size:11pt; letter-spacing:.18em; text-transform:uppercase; }
+.cover .spacer{ flex:1; }
+.cover h1{ font-size:34pt; line-height:1.08; margin:0; }
+.cover .sub{ font-size:14pt; color:var(--ink-soft); margin-top:4mm; max-width:150mm; }
+.cover .meta{ margin-top:14mm; border-top:1px solid var(--line); padding-top:5mm; display:flex; flex-wrap:wrap; gap:5mm 16mm; }
+.cover .meta div{ font-size:10pt; }
+.cover .meta .k{ color:var(--muted); text-transform:uppercase; letter-spacing:.1em; font-size:8pt; }
+.cover .meta .v{ font-weight:600; font-size:11pt; }
+
+/* ---- structural ---- */
+.section{ page-break-inside:auto; }
+.lead{ font-size:11.5pt; color:var(--ink-soft); }
+.callout{ border-left:4px solid var(--adobe-red); background:var(--bg-tint); padding:.6em .9em; margin:.9em 0; border-radius:0 6px 6px 0; }
+.callout.info{ border-left-color:var(--blue); background:#eef5fe; }
+.callout.ok{ border-left-color:var(--green); background:#edf8f0; }
+.callout.warn{ border-left-color:var(--amber); background:#fdf6ec; }
+.callout .t{ font-weight:700; display:block; margin-bottom:.15em; }
+
+pre{ background:#1e1e22; color:#f3f3f3; font-family:var(--mono); font-size:8.6pt; line-height:1.45;
+  padding:.7em .9em; border-radius:6px; overflow:hidden; white-space:pre-wrap; word-break:break-word; margin:.6em 0; }
+pre .c{ color:#7fb37f; }      /* comment */
+pre .k{ color:#e5c07b; }      /* keyword/flag */
+pre code{ background:none; border:none; color:inherit; padding:0; font-size:inherit; }
+
+table{ border-collapse:collapse; width:100%; margin:.7em 0; font-size:9.4pt; }
+th,td{ border:1px solid var(--line); padding:.42em .6em; text-align:left; vertical-align:top; }
+th{ background:var(--bg-soft); font-weight:700; }
+tr:nth-child(even) td{ background:#fafafa; }
+
+.step{ display:flex; gap:10px; margin:.8em 0; page-break-inside:avoid; }
+.step .n{ flex:0 0 26px; height:26px; border-radius:50%; background:var(--adobe-red); color:#fff;
+  font-weight:700; display:flex; align-items:center; justify-content:center; font-size:11pt; }
+.step .body{ flex:1; }
+.step .body h4{ margin:.1em 0 .3em; }
+
+.pill{ display:inline-block; font-size:8pt; font-weight:700; padding:.12em .5em; border-radius:10px; vertical-align:middle; }
+.pill.ok{ background:#e3f4e8; color:var(--green); }
+.pill.warn{ background:#fbeede; color:var(--amber); }
+.pill.no{ background:#fde8e6; color:var(--adobe-red-dark); }
+
+.figure{ margin:1em 0; page-break-inside:avoid; text-align:center; }
+.figure svg{ max-width:100%; height:auto; }
+.figure .cap{ font-size:8.5pt; color:var(--muted); margin-top:.4em; }
+
+.pagebreak{ page-break-before:always; }
+footer.docfoot{ position:fixed; bottom:8mm; left:16mm; right:16mm; font-size:7.5pt; color:var(--muted);
+  border-top:1px solid var(--line); padding-top:2mm; display:flex; justify-content:space-between; }

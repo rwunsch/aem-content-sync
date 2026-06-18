@@ -47,6 +47,9 @@ sense where the destination already carries activation state.)
 
 ---
 
+> 📘 **Prefer a printable, step-by-step guide?** See **[`docs/runbook/runbook.pdf`](docs/runbook/runbook.pdf)** —
+> a deployment &amp; publishing runbook with the permission model and flow diagrams. The sections below are the same material in Markdown.
+
 ## Installation & deployment (any customer environment)
 
 This is a complete, end-to-end walkthrough for standing the app up in **any** Adobe
