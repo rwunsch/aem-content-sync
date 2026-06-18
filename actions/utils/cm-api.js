@@ -19,7 +19,13 @@ async function startContentFlow (params, env, contentSet) {
       contentSetId: contentSet.id,
       destEnvironmentId: env.destEnvId,
       includeACL: false,
-      tier: 'author'
+      tier: 'author',
+      // Wipe the destination content-set paths before import when the set is
+      // flagged for it. Native Content Backflow option: the gateway builds it
+      // into the export CR and AEM deletes the target paths
+      // (/adobe/contentbackflow/wipe) before installing — scoped to exactly the
+      // content set's root paths.
+      wipeDestination: !!contentSet.wipeDestination
     }
   )
   // The CM API returns `contentFlowId` (not `id`); fall back to id just in case.
