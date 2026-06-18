@@ -475,11 +475,18 @@ export default function Help ({ api }) {
           <View elementType="ol" UNSAFE_style={{ margin: 0, paddingLeft: '1.2rem' }}>
             <li>
               <Text>
-                <b>Publish.</b> Publish the app to the org from the Adobe
-                Developer Console (this app type has no CLI publish step).
-                Publishing surfaces it in the Experience Cloud shell, which
-                supplies the signed-in user&rsquo;s token. The raw adobeio URL
-                and the devMode URL are not the production entry points.
+                <b>Publish to the org catalog.</b> Promote to a <b>Production</b>
+                workspace (<code>aio app use -w Production</code>, then
+                <code> aio app deploy</code>). In the Developer Console open
+                <b> Production &rarr; Approval</b>, complete the submission form
+                (title, description, contact email, a 512&times;512 icon, reviewer
+                note) and <b>Submit</b>. An org administrator then approves it in
+                <b> Adobe Exchange &rarr; Manage &rarr; App Builder applications
+                &rarr; Private</b>. Once approved it appears under the org&rsquo;s
+                App Builder Apps at
+                <code> experience.adobe.com/#/@&lt;org&gt;/custom-apps/</code> with a
+                stable, reloadable URL. (This app type has no CLI publish step; the
+                raw adobeio and devMode URLs are not durable entry points.)
               </Text>
             </li>
             <li>
@@ -487,7 +494,10 @@ export default function Help ({ api }) {
                 <b>Login gate.</b> Enable <code>require-adobe-auth</code> so the
                 API can&rsquo;t be called anonymously, then deploy with a full
                 <code> aio app deploy</code>. An anonymous call then returns
-                <b> 401</b>.
+                <b> 401</b>. (On a brand-new namespace the deploy can skip the
+                auth-wrapper sequence, making the backend look unreachable; the
+                bundled <code>post-app-deploy</code> hook re-creates it
+                automatically &mdash; see the troubleshooting doc.)
               </Text>
             </li>
             <li>
