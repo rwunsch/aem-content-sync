@@ -248,9 +248,12 @@ async function handleCopying (params, store, config, st) {
   const csLabel = contentSet.id || (Array.isArray(contentSet.paths) ? contentSet.paths.join(', ') : '')
 
   if (!contentSet.id) {
-    await appendLog(store, log, `Content set [${copyIndex}] missing id — cannot start copy`)
-    await setState(store, { [KEYS.PHASE]: PHASES.NOTIFYING_FAILURE })
-    return { statusCode: 200, body: { failed: true, reason: 'missing_content_set_id' } }
+    // An unconfigured content-set row (no id) — e.g. a half-finished "add content
+    // set" in the UI. Skip it and carry on rather than failing the whole run; a
+    // stray empty row should never abort a run that has valid sets.
+    await appendLog(store, log, `Content set [${copyIndex}] is unconfigured (no content-set id) — skipping.`)
+    await setState(store, { [KEYS.COPY_INDEX]: String(copyIndex + 1), [KEYS.FLOW_ID]: null })
+    return { statusCode: 200, body: { skipped: true, index: copyIndex, reason: 'unconfigured_content_set', nextIndex: copyIndex + 1 } }
   }
 
   const env = st.runEnv || {}
