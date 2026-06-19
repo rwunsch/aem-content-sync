@@ -11,7 +11,7 @@
   <div class="kicker">Deployment &amp; Operations Runbook</div>
   <div class="spacer"></div>
   <h1>Deployment&nbsp;&amp;&nbsp;Publishing<br>Runbook</h1>
-  <div class="sub">Install, deploy, wire the permissions, promote to a Production workspace, and publish the App Builder app to your organization's catalog — for AEM as a Cloud Service.</div>
+  <div class="sub">Clone, build, deploy, wire the permissions, run &amp; test, promote to Production, and publish the App Builder app to your organization's catalog — for AEM as a Cloud Service. Written so someone new to the project can follow it end to end.</div>
   <div class="spacer"></div>
   <div class="meta">
     <div><div class="k">Project</div><div class="v">AEM Content Sync</div></div>
@@ -21,11 +21,38 @@
   </div>
 </section>
 
-<!-- ============ 1. OVERVIEW ============ -->
+<!-- ============ CONTENTS ============ -->
 <section class="section">
-<h2>1 · What this is</h2>
+<h2>Contents</h2>
+<ol style="font-size:10.5pt;line-height:1.7">
+<li>What this is &amp; what App Builder is</li>
+<li>Prerequisites &amp; tooling</li>
+<li>Clone &amp; explore the repository</li>
+<li>The permission model (read this first)</li>
+<li>Developer Console — project, integration, API &amp; credentials</li>
+<li>Local development</li>
+<li>Deploy to Stage</li>
+<li>Configure jobs &amp; credentials in the app</li>
+<li>Publish modes</li>
+<li>Test thoroughly</li>
+<li>Promote to Production</li>
+<li>Publish to the organization catalog (incl. Adobe Exchange approval)</li>
+<li>Operations &amp; troubleshooting</li>
+</ol>
+</section>
+
+<!-- ============ 1 ============ -->
+<section class="section pagebreak">
+<h2>1 · What this is &amp; what App Builder is</h2>
 <p class="lead">The Content Sync app wraps Cloud Manager's <strong>Content Copy</strong> in a scheduled, observable, role-gated pipeline that keeps a lower environment (Stage) aligned with Production — including the <em>published</em> state, which Content Copy alone does not carry across.</p>
-<p>It is an Adobe <strong>App Builder</strong> application (a <code>dx/excshell/1</code> Experience Cloud Shell extension) with a React SPA front end and Adobe I/O Runtime actions behind it. It runs entirely on Adobe infrastructure; there are no customer-hosted servers.</p>
+
+<h3>Adobe App Builder, in brief</h3>
+<p><strong>App Builder</strong> is Adobe's serverless framework for building custom apps that extend Experience Cloud. An app has two halves:</p>
+<ul>
+<li><strong>A front end</strong> — a single-page app (here, React + React Spectrum) served from Adobe's CDN.</li>
+<li><strong>A back end</strong> — serverless functions ("actions") running on <strong>Adobe I/O Runtime</strong> (Apache OpenWhisk). Actions can be web-facing or private, and can be chained, scheduled (alarms/cron), and gated by IMS auth.</li>
+</ul>
+<p>This app is packaged as a <code>dx/excshell/1</code> <strong>Experience Cloud Shell extension</strong> (not a standalone application). That packaging is what lets the shell at <code>experience.adobe.com</code> load the SPA in an iframe and perform the IMS token / org handshake — which is the prerequisite for the gated back-end actions to be callable from the UI. It runs entirely on Adobe infrastructure; there are no customer-hosted servers.</p>
 
 <div class="figure">
 <svg viewBox="0 0 720 250" xmlns="http://www.w3.org/2000/svg" font-family="Helvetica,Arial,sans-serif" font-size="12">
@@ -35,22 +62,18 @@
   <rect x="30" y="108" width="160" height="40" rx="5" fill="#fff" stroke="#999"/><text x="110" y="133" text-anchor="middle">ui-api (gated)</text>
   <rect x="30" y="158" width="160" height="40" rx="5" fill="#fff" stroke="#999"/><text x="110" y="178" text-anchor="middle">orchestrator</text>
   <text x="110" y="192" text-anchor="middle" font-size="9" fill="#666">+ scheduler (cron */15)</text>
-
   <rect x="290" y="55" width="180" height="70" rx="8" fill="#eef5fe" stroke="#1473e6"/>
   <text x="380" y="80" text-anchor="middle" font-weight="bold" fill="#1473e6">Cloud Manager API</text>
   <text x="380" y="100" text-anchor="middle" font-size="10">Content Copy · programs ·</text>
   <text x="380" y="114" text-anchor="middle" font-size="10">environments · content sets</text>
-
   <rect x="540" y="20" width="170" height="95" rx="8" fill="#edf8f0" stroke="#2d9d4f"/>
   <text x="625" y="44" text-anchor="middle" font-weight="bold" fill="#2d9d4f">AEM Author — PROD</text>
   <text x="625" y="66" text-anchor="middle" font-size="10">QueryBuilder: read the</text>
   <text x="625" y="80" text-anchor="middle" font-size="10">activated (published) set</text>
-
   <rect x="540" y="135" width="170" height="95" rx="8" fill="#edf8f0" stroke="#2d9d4f"/>
   <text x="625" y="159" text-anchor="middle" font-weight="bold" fill="#2d9d4f">AEM Author — STAGE</text>
   <text x="625" y="181" text-anchor="middle" font-size="10">/bin/replicate: activate</text>
   <text x="625" y="195" text-anchor="middle" font-size="10">exactly that set</text>
-
   <line x1="210" y1="128" x2="290" y2="95" stroke="#666" marker-end="url(#a)"/>
   <line x1="470" y1="80" x2="540" y2="67" stroke="#666" marker-end="url(#a)"/>
   <text x="500" y="60" font-size="9" fill="#666">copy</text>
@@ -69,29 +92,62 @@
 <p>Cloud Manager Content Copy is <strong>author-tier only</strong> and <strong>strips replication status</strong> (<code>cq:lastReplicated*</code>, <code>cq:lastReplicationAction*</code>, <code>cq:lastReplicatedBy*</code>) — by design, because that metadata describes the <em>source's</em> publish tier. So after a copy the destination author has no record of what was published, and nothing is published on Stage. The app's <strong>prod-mirror</strong> mode reads Production's activated set (QueryBuilder, per agent: publish/preview) and replicates exactly that set on Stage — reproducing production's live published state every run.</p>
 </section>
 
-<!-- ============ 2. PERMISSIONS ============ -->
+<!-- ============ 2 ============ -->
 <section class="section pagebreak">
-<h2>2 · The permission model (read this first)</h2>
+<h2>2 · Prerequisites &amp; tooling</h2>
+<table>
+<tr><th>You need</th><th>Notes</th></tr>
+<tr><td><strong>Node.js 18+</strong> and npm</td><td>The actions run on <code>nodejs:18</code>; build with a matching local Node.</td></tr>
+<tr><td><strong>git</strong></td><td>To clone the repository.</td></tr>
+<tr><td><strong>Adobe I/O CLI</strong> (<code>aio</code>)</td><td>Use the <strong>project-local</strong> one (<code>./node_modules/.bin/aio</code>) — a global <code>aio</code> may resolve an incompatible Parcel and break the dev server / deploy.</td></tr>
+<tr><td><strong>Developer Console access</strong></td><td>Rights to create an App Builder project, add APIs, and create credentials in your organization.</td></tr>
+<tr><td><strong>Admin Console access</strong></td><td>To attach product profiles to the API credential (Cloud Manager roles + AEM Administrators per environment).</td></tr>
+<tr><td><strong>Cloud Manager program</strong></td><td>A program with at least a source (Prod) and destination (Stage) <strong>author</strong> environment, and a <strong>Content Set</strong> defining the paths to copy.</td></tr>
+<tr><td><strong>AEM Service Credentials</strong></td><td>Per environment, downloaded from each environment's Developer Console — used for the publish step (see §4 &amp; §5).</td></tr>
+</table>
+<div class="callout info"><span class="t">Two "Developer Consoles"</span>
+There is the <strong>Adobe Developer Console</strong> (<code>developer.adobe.com/console</code>) where the App Builder project, its APIs, and the Cloud Manager <em>OAuth S2S</em> credential live; and there is each <strong>AEM environment's Developer Console</strong> (reached from Cloud Manager) where you download that environment's <em>AEM Service Credentials</em>. They are different things — §4 explains why you need both.</div>
+</section>
+
+<!-- ============ 3 ============ -->
+<section class="section pagebreak">
+<h2>3 · Clone &amp; explore the repository</h2>
+<div class="step"><div class="n">1</div><div class="body"><h4>Clone and install</h4>
+<pre>git clone https://github.com/rwunsch/aem-content-sync.git
+cd aem-content-sync
+npm install            <span class="c"># also runs a postinstall that defuses an events-plugin deploy crash</span></pre></div></div>
+
+<div class="step"><div class="n">2</div><div class="body"><h4>What's in the box</h4>
+<table>
+<tr><th>Path</th><th>What it is</th></tr>
+<tr><td><code>app.config.yaml</code></td><td>Declares the app as a <code>dx/excshell/1</code> extension; includes <code>ext.config.yaml</code>.</td></tr>
+<tr><td><code>ext.config.yaml</code></td><td>The runtime manifest — actions (<code>orchestrator</code>, <code>ui-api</code>), the scheduler trigger/rule, web assets, and the <code>post-app-deploy</code> hook.</td></tr>
+<tr><td><code>actions/</code></td><td>Back-end: <code>orchestrator/</code> (the engine), <code>ui-api/</code> (the gated API), <code>utils/</code> (auth, cm-api, state, authz, config).</td></tr>
+<tr><td><code>web-src/src/</code></td><td>React SPA — <code>App.js</code>, <code>components/</code> (Configure, Settings, Help), <code>exc-runtime.js</code> (the shell loader).</td></tr>
+<tr><td><code>config/content-sync.json</code></td><td>Deploy-time default config (placeholders); the UI overrides it at runtime in I/O State.</td></tr>
+<tr><td><code>scripts/</code></td><td>Build helpers + <code>ensure-auth-sequence.js</code> (the self-healing auth-wrapper hook).</td></tr>
+<tr><td><code>docs/</code></td><td>This runbook, the troubleshooting guide, and architecture notes.</td></tr>
+</table></div></div>
+</section>
+
+<!-- ============ 4 — PERMISSIONS ============ -->
+<section class="section pagebreak">
+<h2>4 · The permission model (read this first)</h2>
 <p class="lead">Three independent authorization concerns, each granted in a different place. Getting one wrong fails in a different way — so understand them before you start.</p>
 
 <div class="figure">
 <svg viewBox="0 0 720 360" xmlns="http://www.w3.org/2000/svg" font-family="Helvetica,Arial,sans-serif" font-size="11.5">
-  <!-- A: user access -->
   <rect x="10" y="15" width="700" height="95" rx="8" fill="#eef5fe" stroke="#1473e6"/>
   <text x="24" y="36" font-weight="bold" fill="#1473e6">A · Who can OPEN the app  (authentication + authorization of the human)</text>
   <rect x="24" y="46" width="210" height="52" rx="5" fill="#fff" stroke="#999"/><text x="129" y="68" text-anchor="middle">require-adobe-auth</text><text x="129" y="84" text-anchor="middle" font-size="9" fill="#666">valid IMS token · same org</text>
   <rect x="250" y="46" width="210" height="52" rx="5" fill="#fff" stroke="#999"/><text x="355" y="68" text-anchor="middle">Product entitlement</text><text x="355" y="84" text-anchor="middle" font-size="9" fill="#666">Cloud Manager profile</text>
   <rect x="476" y="46" width="220" height="52" rx="5" fill="#fff" stroke="#999"/><text x="586" y="64" text-anchor="middle">In-app profile gate</text><text x="586" y="80" text-anchor="middle" font-size="9" fill="#666">authz.js → Deployment /</text><text x="586" y="92" text-anchor="middle" font-size="9" fill="#666">Program Manager</text>
-
-  <!-- B: CM credential -->
   <rect x="10" y="125" width="345" height="210" rx="8" fill="#fbf2f1" stroke="#EB1000"/>
   <text x="24" y="146" font-weight="bold" fill="#B30B00">B · Cloud Manager — control plane</text>
   <text x="24" y="164" font-size="10" fill="#444">OAuth Server-to-Server credential (per workspace)</text>
   <rect x="24" y="174" width="317" height="44" rx="5" fill="#fff" stroke="#999"/><text x="32" y="192" font-size="10">Profile: <tspan font-weight="bold">Deployment Manager – Cloud Service</tspan></text><text x="32" y="208" font-size="9" fill="#666">→ start Content Copy (createContentFlow)</text>
   <rect x="24" y="224" width="317" height="40" rx="5" fill="#fff" stroke="#999"/><text x="32" y="242" font-size="10">Profile: <tspan font-weight="bold">Developer – Cloud Service</tspan></text><text x="32" y="257" font-size="9" fill="#666">→ list programs / envs / content sets (read)</text>
   <rect x="24" y="270" width="317" height="52" rx="5" fill="#fff5f4" stroke="#EB1000"/><text x="32" y="288" font-size="10" font-weight="bold" fill="#B30B00">AEM Administrators – author –</text><text x="32" y="302" font-size="10" font-weight="bold" fill="#B30B00">Program &lt;id&gt; – Environment &lt;id&gt;</text><text x="32" y="316" font-size="9" fill="#666">REQUIRED for the copy · per env (source + dest)</text>
-
-  <!-- C: AEM credential -->
   <rect x="365" y="125" width="345" height="210" rx="8" fill="#edf8f0" stroke="#2d9d4f"/>
   <text x="379" y="146" font-weight="bold" fill="#2d9d4f">C · AEM author — data plane</text>
   <text x="379" y="164" font-size="10" fill="#444">Developer Console Service Credentials (JWT), per environment</text>
@@ -110,41 +166,128 @@ The Cloud Manager <em>Deployment Manager</em> profile is <strong>necessary but n
 <tr><td><strong>Cloud Manager</strong> token</td><td><code>client_credentials</code> grant at <code>ims/token/v3</code>, using the S2S client id + secret</td><td>Cloud Manager API — copy, programs, environments, content sets</td></tr>
 <tr><td><strong>AEM author</strong> token</td><td>signed <strong>JWT</strong> exchanged at <code>ims/exchange/jwt</code>, using the per-environment Service Credentials</td><td>Classic AEM <code>/bin/replicate</code> &amp; <code>/bin/querybuilder</code> (prod-mirror publish)</td></tr>
 </table>
+<p><strong>What a "Service Credential" is:</strong> an AEM-as-a-Cloud-Service environment exposes a per-environment <em>Service Credentials</em> JSON (technical account + private key + metascopes) from its Developer Console. The app signs a JWT with that private key and exchanges it for an AEM access token. This is separate from the Cloud Manager OAuth credential because the classic AEM <code>/bin/*</code> endpoints do not accept the Cloud Manager token.</p>
 </section>
 
-<!-- ============ 3. SETUP STEPS ============ -->
+<!-- ============ 5 — DEV CONSOLE ============ -->
 <section class="section pagebreak">
-<h2>3 · Step-by-step — Stage</h2>
+<h2>5 · Developer Console — project, integration, API &amp; credentials</h2>
 
-<div class="step"><div class="n">1</div><div class="body"><h4>Developer Console project &amp; workspace</h4>
-<p>Create (or open) the App Builder project. It has a <strong>Stage</strong> workspace by default; you'll add <strong>Production</strong> later (§5). Add the APIs the app needs: <strong>Cloud Manager</strong>, <strong>I/O Management</strong>, <strong>State</strong>.</p></div></div>
+<div class="step"><div class="n">1</div><div class="body"><h4>Create the App Builder project</h4>
+<p>In the <a href="https://developer.adobe.com/console">Adobe Developer Console</a>, create a new project from the <strong>App Builder</strong> template (this provisions an I/O Runtime namespace). It comes with a <strong>Stage</strong> workspace; you'll add a <strong>Production</strong> workspace later (§11). Each workspace has its <em>own</em> namespace and credentials.</p></div></div>
 
-<div class="step"><div class="n">2</div><div class="body"><h4>Cloud Manager credential + profiles</h4>
-<p>On the workspace, add an <strong>OAuth Server-to-Server</strong> credential to the Cloud Manager API and attach the product profiles <strong>Deployment Manager – Cloud Service</strong> and <strong>Developer – Cloud Service</strong> (Figure 2-B).</p></div></div>
+<div class="step"><div class="n">2</div><div class="body"><h4>Add the APIs</h4>
+<p>To the workspace, add: <strong>Cloud Manager</strong> (drives Content Copy), <strong>I/O Management API</strong> (required for App Builder deploy/registration), and <strong>State</strong> (the app stores jobs &amp; credentials there). Adding the Cloud Manager API is what creates the OAuth Server-to-Server credential.</p></div></div>
 
-<div class="step"><div class="n">3</div><div class="body"><h4>AEM Administrators profile — per environment <span class="pill warn">easy to miss</span></h4>
-<p>In the <strong>Admin Console</strong>, add this same API credential to the <code>AEM Administrators – author – Program &lt;id&gt; – Environment &lt;id&gt;</code> product profile for <strong>both</strong> the source and destination environments (Products → that profile → <em>API credentials</em> → <em>Add API credentials</em>). Allow ~10–30 min to propagate.</p></div></div>
+<div class="step"><div class="n">3</div><div class="body"><h4>Create the OAuth Server-to-Server credential &amp; attach Cloud Manager profiles</h4>
+<p>When adding Cloud Manager, choose <strong>OAuth Server-to-Server</strong>. On its <em>Product Profiles</em> tab attach <strong>Deployment Manager – Cloud Service</strong> (needed to start a copy) and <strong>Developer – Cloud Service</strong> (read). This is credential <strong>B</strong> in Figure 2.</p></div></div>
 
-<div class="step"><div class="n">4</div><div class="body"><h4>Pull config &amp; deploy</h4>
-<pre><span class="c"># project-local aio (matching Parcel) — always use ./node_modules/.bin/aio</span>
-npm install
-aio app use            <span class="c"># select the Stage workspace; writes .aio + .env</span>
-aio app deploy         <span class="c"># builds SPA + actions, deploys, publishes the extension</span></pre>
-<p>The deploy prints the in-shell URL. Open it via the Experience Cloud Shell — never the raw <code>adobeio-static.net</code> URL (the shell injects the IMS token the gated actions need).</p></div></div>
+<div class="step"><div class="n">4</div><div class="body"><h4>Add the credential to the AEM Administrators profile — per environment <span class="pill warn">critical</span></h4>
+<p>In the <strong>Admin Console</strong> → <strong>Products</strong>, open the product profile named <code>AEM Administrators – author – Program &lt;id&gt; – Environment &lt;id&gt;</code>. On its <strong>API credentials</strong> tab choose <strong>Add API credentials</strong> and add the OAuth S2S credential from step 3. <strong>Do this for both the source and the destination environment.</strong> Without it, <code>createContentFlow</code> returns 403 even though listing works. Allow ~10–60 min to propagate.</p>
+<div class="callout info"><span class="t">If listing works but the copy 403s</span>This is almost always the per-environment AEM Administrators membership not (yet) in effect. Note the copy is initiated against the <strong>source</strong> environment, so the source env's profile is the one the call checks first.</div></div></div>
 
-<div class="step"><div class="n">5</div><div class="body"><h4>Map the credential into action inputs</h4>
-<p><code>aio app use</code> writes the IMS S2S <em>context</em> but <strong>not</strong> the convenience vars the actions read. Set them in <code>.env</code> from the context values (strip the brackets on the secret), then redeploy:</p>
+<div class="step"><div class="n">5</div><div class="body"><h4>Download each environment's AEM Service Credentials</h4>
+<p>From <strong>Cloud Manager → the environment → Developer Console</strong>, download the environment's <strong>Service Credentials (JWT)</strong> JSON. You'll paste these into the app's Settings (§8). These are credential <strong>C</strong> in Figure 2 — one per environment the job touches.</p></div></div>
+</section>
+
+<!-- ============ 6 — LOCAL DEV ============ -->
+<section class="section pagebreak">
+<h2>6 · Local development</h2>
+<div class="step"><div class="n">1</div><div class="body"><h4>Sign in &amp; select the Stage workspace</h4>
+<pre>aio login                <span class="c"># browser IMS login (the cli context)</span>
+aio app use              <span class="c"># pick your project → Stage workspace; writes .aio + .env</span></pre></div></div>
+
+<div class="step"><div class="n">2</div><div class="body"><h4>Map the Cloud Manager credential into action inputs</h4>
+<p><code>aio app use</code> writes the IMS S2S <em>context</em> lines but <strong>not</strong> the convenience vars the actions read. Set them in <code>.env</code> from the context values (strip the brackets on the secret):</p>
 <pre>IMS_ORG_ID       = AIO_ims_contexts_&lt;ctx&gt;_ims__org__id
 CM_CLIENT_ID     = AIO_ims_contexts_&lt;ctx&gt;_client__id
-CM_CLIENT_SECRET = AIO_ims_contexts_&lt;ctx&gt;_client__secrets   <span class="c"># strip [ ]</span></pre></div></div>
+CM_CLIENT_SECRET = AIO_ims_contexts_&lt;ctx&gt;_client__secrets   <span class="c"># strip [ ]</span></pre>
+<p>Verify by minting a token: a <code>client_credentials</code> POST to <code>ims-na1.adobelogin.com/ims/token/v3</code> that returns a 200 with an <code>access_token</code> means the credential is good.</p></div></div>
 
-<div class="step"><div class="n">6</div><div class="body"><h4>Configure jobs &amp; AEM credentials in the app</h4>
-<p>Open the app → <strong>Settings</strong>: paste each environment's AEM <strong>Service Credentials</strong> JSON (Figure 2-C). → <strong>Configure</strong>: pick the program, source→destination environments, content set(s), publish mode (<strong>prod-mirror</strong>), and the cron schedule. → <strong>Access control</strong>: confirm the allowed Admin Console profiles (default: Deployment + Program Manager).</p></div></div>
+<div class="step"><div class="n">3</div><div class="body"><h4>Run locally, inside the shell</h4>
+<pre>aio app dev              <span class="c"># local dev server (https://localhost:9080)</span></pre>
+<p>Open the local build <em>through the shell</em> so it gets an IMS token:</p>
+<pre>https://experience.adobe.com/?devMode=true#/custom-apps/?localDevUrl=https://localhost:9080</pre>
+<div class="callout warn"><span class="t">WSL / Windows cert trust</span>The shell iframe won't load <code>https://localhost</code> unless the dev cert is trusted by the OS (you can't click through a cert warning in an iframe). Regenerate the dev cert with a proper SAN (<code>DNS:localhost,IP:127.0.0.1</code>) and add it to the OS trust store. Never open the raw <code>adobeio-static.net</code> URL directly — only the shell supplies the token.</div></div></div>
 </section>
 
-<!-- ============ 4. PRODUCTION + PUBLISH ============ -->
+<!-- ============ 7 — DEPLOY STAGE ============ -->
 <section class="section pagebreak">
-<h2>4 · Promote to Production &amp; publish to the catalog</h2>
+<h2>7 · Deploy to Stage</h2>
+<pre>aio app deploy           <span class="c"># build SPA + actions, deploy to the namespace, publish the extension point</span></pre>
+<p>What you get, and the security model:</p>
+<ul>
+<li><strong>SPA</strong> deployed to the CDN; <strong>actions</strong> deployed to the workspace's I/O Runtime namespace.</li>
+<li><code>ui-api</code> is a <strong>web action behind <code>require-adobe-auth</code></strong> — anonymous calls get <strong>401</strong>; only a valid IMS token from the same org is accepted.</li>
+<li><code>orchestrator</code> is a <strong>non-web (private)</strong> action — no public URL; invoked only inside the namespace (the scheduler rule, the <code>ui-api</code> trigger op, and its own self-chain), all via the authenticated namespace API.</li>
+<li>The static bundle contains <strong>no secrets</strong>; all credentials live in action inputs / I/O State, server-side.</li>
+</ul>
+<div class="callout info"><span class="t">Stale CLI login</span>If <code>aio app deploy</code> fails with <code>IMSOAuthSDK:TIMEOUT</code> / <code>CANNOT_GENERATE_TOKEN</code>, the cached token expired — re-run <code>aio login</code>. (Action <em>code</em> can also be updated with the static Runtime namespace key via <code>aio rt</code> / the OpenWhisk REST API, but web/CDN deploy and catalog publish need a real login.)</div>
+</section>
+
+<!-- ============ 8 — CONFIGURE ============ -->
+<section class="section pagebreak">
+<h2>8 · Configure jobs &amp; credentials in the app</h2>
+<p>Open the deployed app in the shell, then:</p>
+<div class="step"><div class="n">1</div><div class="body"><h4>Settings → AEM Service Credentials</h4>
+<p>Paste each environment's Service Credentials JSON (from §5 step 5) into its box and Save. Use <strong>Check credentials</strong> to confirm. These are stored encrypted server-side and never returned to the browser.</p></div></div>
+<div class="step"><div class="n">2</div><div class="body"><h4>Configure → the job</h4>
+<p>Pick the <strong>program</strong>, the <strong>source → destination</strong> environments, the <strong>content set(s)</strong> (author-tier; each carries a publish flag and an optional <em>wipe destination</em>), the <strong>publish mode</strong> (§9), and the <strong>cron schedule</strong>. Changes autosave to I/O State — no redeploy needed.</p></div></div>
+<div class="step"><div class="n">3</div><div class="body"><h4>Settings → Access control</h4>
+<p>Choose which <strong>Admin Console profiles</strong> may use the app (default: Cloud Manager <strong>Deployment &amp; Program Managers</strong>). You can add others, enter a custom IMS group, or open it to any signed-in org user. The server refuses a selection that would lock <em>you</em> out.</p></div></div>
+</section>
+
+<!-- ============ 9 — PUBLISH MODES ============ -->
+<section class="section pagebreak">
+<h2>9 · Publish modes</h2>
+<p class="lead">After the copy, the publish step reproduces a published state on the destination. Choose the mode per job.</p>
+<table>
+<tr><th>Mode</th><th>What it does</th><th>Use when</th></tr>
+<tr><td><strong>prod-mirror</strong> (default)</td><td>Queries the <em>source</em> (Prod) for its activated set per agent (publish / preview) and replicates <em>exactly that set</em> on the destination — tracking new publishes and removals each run, excluding drafts and preview-only content.</td><td>You want Stage to faithfully mirror what is live on Prod.</td></tr>
+<tr><td><strong>tree activation</strong></td><td>Server-side tree activation from a root path. With <em>onlyActivated</em> it activates only nodes already marked activated; otherwise it walks and activates the tree.</td><td>Large subtrees where a server-side walk is more efficient than path-by-path.</td></tr>
+<tr><td><strong>publish everything</strong></td><td>Activates every path in the content set, regardless of source publish state.</td><td>The content set is curated so "everything in it should be published."</td></tr>
+</table>
+<div class="callout"><span class="t">Targets &amp; options</span>Each job can target <strong>publish</strong> and/or <strong>preview</strong>, include children, set chunk sizes, and run as a <strong>dry run</strong> (reports what it would do without replicating). References are <em>not</em> followed automatically — include referenced paths in the content set if you need them.</div>
+<div class="callout warn"><span class="t">Scale note</span>prod-mirror enumerates Prod over QueryBuilder (HTTP) and replicates in chunks within the 60-second action limit. This is fine for curated/targeted sets but does not scale cleanly to millions of nodes — at that scale the write side is bounded by the destination's replication-agent throughput regardless of tooling.</div>
+</section>
+
+<!-- ============ 10 — TEST ============ -->
+<section class="section pagebreak">
+<h2>10 · Test thoroughly</h2>
+<div class="step"><div class="n">1</div><div class="body"><h4>Validate eligibility (read-only)</h4>
+<p>In <strong>Help → Diagnostics → Validate eligibility</strong>, pick a job. It counts how many nodes are currently activated for publish and for preview under each publish path — changing nothing. Use it to confirm the source holds the publish status a run will rely on, and to spot preview gaps.</p></div></div>
+<div class="step"><div class="n">2</div><div class="body"><h4>Run once, manually</h4>
+<p>Trigger the job from the UI (<em>Run now</em>). The scheduler also fires on its cron, but a manual run is the fastest test. Watch the run progress through the state machine:</p>
+<div class="figure">
+<svg viewBox="0 0 720 90" xmlns="http://www.w3.org/2000/svg" font-family="Helvetica,Arial,sans-serif" font-size="10">
+  <g>
+  <rect x="6"   y="30" width="110" height="40" rx="6" fill="#eef5fe" stroke="#1473e6"/><text x="61"  y="54" text-anchor="middle">CHECK_STUCK</text>
+  <rect x="146" y="30" width="110" height="40" rx="6" fill="#fbf2f1" stroke="#EB1000"/><text x="201" y="54" text-anchor="middle">COPYING</text>
+  <rect x="286" y="30" width="120" height="40" rx="6" fill="#edf8f0" stroke="#2d9d4f"/><text x="346" y="54" text-anchor="middle">PUBLISHING</text>
+  <rect x="436" y="30" width="130" height="40" rx="6" fill="#fff" stroke="#999"/><text x="501" y="49" text-anchor="middle">NOTIFYING_</text><text x="501" y="62" text-anchor="middle">SUCCESS</text>
+  <rect x="596" y="30" width="110" height="40" rx="6" fill="#fff" stroke="#999"/><text x="651" y="54" text-anchor="middle">IDLE</text>
+  <line x1="116" y1="50" x2="146" y2="50" stroke="#999" marker-end="url(#g)"/>
+  <line x1="256" y1="50" x2="286" y2="50" stroke="#999" marker-end="url(#g)"/>
+  <line x1="406" y1="50" x2="436" y2="50" stroke="#999" marker-end="url(#g)"/>
+  <line x1="566" y1="50" x2="596" y2="50" stroke="#999" marker-end="url(#g)"/>
+  <defs><marker id="g" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#999"/></marker></defs>
+  </g>
+</svg>
+<div class="cap">Figure 3 — Run state machine. COPYING calls Cloud Manager; PUBLISHING drives the prod-mirror replication; failures route to NOTIFYING_FAILURE → IDLE.</div>
+</div>
+<p>Progress, per-job status and the last ~50 log lines are visible in the UI. Cloud-Manager content-flow status is <code>IN_PROGRESS / COMPLETED / FAILED / CANCELLED</code>.</p></div></div>
+<div class="step"><div class="n">3</div><div class="body"><h4>Confirm the outcome</h4>
+<ul>
+<li>The content-flow reaches <strong>COMPLETED</strong> and the run reaches <strong>NOTIFYING_SUCCESS → IDLE</strong>.</li>
+<li>On the destination author, the copied paths exist and (for the activated subset) show as activated for the chosen agents.</li>
+<li>Re-run <strong>Validate eligibility</strong> on the destination and confirm the counts match the source's published set.</li>
+<li>Try a <strong>dry run</strong> first on a new job to preview scope without writing.</li>
+</ul></div></div>
+</section>
+
+<!-- ============ 11 — PRODUCTION ============ -->
+<section class="section pagebreak">
+<h2>11 · Promote to Production</h2>
 <div class="figure">
 <svg viewBox="0 0 720 150" xmlns="http://www.w3.org/2000/svg" font-family="Helvetica,Arial,sans-serif" font-size="10.5">
   <g>
@@ -161,58 +304,59 @@ CM_CLIENT_SECRET = AIO_ims_contexts_&lt;ctx&gt;_client__secrets   <span class="c
   <defs><marker id="f" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#999"/></marker></defs>
   </g>
 </svg>
-<div class="cap">Figure 3 — Production promotion and catalog publish flow.</div>
+<div class="cap">Figure 4 — Production promotion and catalog publish flow.</div>
 </div>
 
-<div class="step"><div class="n">1</div><div class="body"><h4>Switch the project to Production</h4>
-<pre>aio app use -w Production --overwrite --no-input   <span class="c"># rewrites .env/.aio to the Production namespace</span></pre>
-<div class="callout info"><span class="t">Back up first</span>Switching <strong>overwrites</strong> the local <code>.env</code>/<code>.aio</code>. Copy them aside so you can return to Stage dev with <code>aio app use -w Stage</code>.</div>
-<p>Production needs its <strong>own</strong> Cloud Manager S2S credential and — as in §3 steps 2–3 — the <strong>Deployment Manager</strong> profile <em>and</em> the per-environment <strong>AEM Administrators</strong> profiles. Re-map the CM convenience vars (§3 step 5) for the Production credential.</p></div></div>
-
-<div class="step"><div class="n">2</div><div class="body"><h4>Deploy to Production</h4>
+<div class="step"><div class="n">1</div><div class="body"><h4>Set up the Production workspace</h4>
+<p>In the Developer Console, the Production workspace needs its <strong>own</strong> OAuth S2S credential and the same APIs as Stage (Cloud Manager, I/O Management, State), plus — repeating §5 step 4 — the <strong>Deployment Manager</strong> profile <em>and</em> the per-environment <strong>AEM Administrators</strong> profiles. It has a separate runtime namespace.</p></div></div>
+<div class="step"><div class="n">2</div><div class="body"><h4>Switch the project to Production</h4>
+<pre>cp .env .env.stage.bak ; cp .aio .aio.stage.bak    <span class="c"># back up Stage first</span>
+aio app use -w Production --overwrite --no-input    <span class="c"># rewrites .env/.aio to Production</span></pre>
+<div class="callout info"><span class="t">It overwrites local config</span>Your deployed Stage app keeps running; only the local <code>.env</code>/<code>.aio</code> flip. Re-map the CM convenience vars (§6 step 2) for the Production credential. Return to Stage later with <code>aio app use -w Stage</code> or by restoring the backups.</div></div></div>
+<div class="step"><div class="n">3</div><div class="body"><h4>Deploy to Production</h4>
 <pre>aio app deploy</pre>
-<div class="callout warn"><span class="t">Fresh-namespace gotcha (auto-healed)</span>On a brand-new namespace the deploy can create the inner <code>__secured_ui-api</code> action but skip the <code>require-adobe-auth</code> <code>ui-api</code> <em>wrapper sequence</em> → the SPA's calls 404 → UI shows "backend unreachable." The app ships a <code>post-app-deploy</code> hook (<code>scripts/ensure-auth-sequence.js</code>) that re-creates it automatically after every deploy.</div></div></div>
-
-<div class="step"><div class="n">3</div><div class="body"><h4>Seed the Production app's configuration</h4>
-<p>The Production namespace starts empty. Configure jobs, AEM Service Credentials and access profiles in the app exactly as in §3 step 6 (Production has its own I/O State, independent of Stage).</p></div></div>
-
-<div class="step"><div class="n">4</div><div class="body"><h4>Submit for publishing</h4>
-<p>Developer Console → <strong>Production</strong> workspace → <strong>Approval</strong> → fill the submission form (App title, description, contact email, 512×512 icon, note to reviewer) → <strong>Submit</strong>. Status becomes <em>In Review</em>.</p></div></div>
-
-<div class="step"><div class="n">5</div><div class="body"><h4>Approve (org admin)</h4>
-<p><a href="https://exchange.adobe.com/manage">exchange.adobe.com/manage</a> → <strong>App Builder applications</strong> → <strong>Private</strong> tab → find the app (<em>Pending Review</em>) → <strong>Review</strong> → <strong>Approve</strong>. Status flips to <span class="pill ok">Approved</span>.</p></div></div>
-
-<div class="step"><div class="n">6</div><div class="body"><h4>Result — stable catalog URL</h4>
-<p>The app appears under the org's App Builder Apps with a durable, reloadable URL (no more <code>devMode</code>):</p>
-<pre>https://experience.adobe.com/#/@&lt;org&gt;/custom-apps/&lt;namespace&gt;/</pre>
-<p>End users still need the product entitlement <em>and</em> one of the configured Admin Console profiles (Figure 2-A).</p></div></div>
+<div class="callout warn"><span class="t">Fresh-namespace gotcha (auto-healed)</span>On a brand-new namespace the deploy can create the inner <code>__secured_ui-api</code> action but skip the <code>require-adobe-auth</code> <code>ui-api</code> <em>wrapper sequence</em> → the SPA's calls 404 → UI shows "backend unreachable." The bundled <code>post-app-deploy</code> hook (<code>scripts/ensure-auth-sequence.js</code>) re-creates it automatically after every deploy.</div></div></div>
+<div class="step"><div class="n">4</div><div class="body"><h4>Seed the Production configuration &amp; test</h4>
+<p>The Production namespace starts empty — repeat §8 (Service Credentials, job, access control) and §10 (test) there. It has its own I/O State, independent of Stage.</p></div></div>
 </section>
 
-<!-- ============ 5. RUN & MONITOR ============ -->
+<!-- ============ 12 — CATALOG PUBLISH ============ -->
 <section class="section pagebreak">
-<h2>5 · Run &amp; monitor</h2>
-<p>A run is triggered by the scheduler (cron <code>*/15</code> evaluates each job's own schedule) or manually from the UI. Each run is a small state machine; the orchestrator runs one phase per invocation and self-chains, so no single action exceeds the 60-second I/O Runtime limit.</p>
-<div class="figure">
-<svg viewBox="0 0 720 90" xmlns="http://www.w3.org/2000/svg" font-family="Helvetica,Arial,sans-serif" font-size="10">
-  <g>
-  <rect x="6"   y="30" width="110" height="40" rx="6" fill="#eef5fe" stroke="#1473e6"/><text x="61"  y="54" text-anchor="middle">CHECK_STUCK</text>
-  <rect x="146" y="30" width="110" height="40" rx="6" fill="#fbf2f1" stroke="#EB1000"/><text x="201" y="54" text-anchor="middle">COPYING</text>
-  <rect x="286" y="30" width="120" height="40" rx="6" fill="#edf8f0" stroke="#2d9d4f"/><text x="346" y="54" text-anchor="middle">PUBLISHING</text>
-  <rect x="436" y="30" width="130" height="40" rx="6" fill="#fff" stroke="#999"/><text x="501" y="49" text-anchor="middle">NOTIFYING_</text><text x="501" y="62" text-anchor="middle">SUCCESS</text>
-  <rect x="596" y="30" width="110" height="40" rx="6" fill="#fff" stroke="#999"/><text x="651" y="54" text-anchor="middle">IDLE</text>
-  <line x1="116" y1="50" x2="146" y2="50" stroke="#999" marker-end="url(#g)"/>
-  <line x1="256" y1="50" x2="286" y2="50" stroke="#999" marker-end="url(#g)"/>
-  <line x1="406" y1="50" x2="436" y2="50" stroke="#999" marker-end="url(#g)"/>
-  <line x1="566" y1="50" x2="596" y2="50" stroke="#999" marker-end="url(#g)"/>
-  <defs><marker id="g" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#999"/></marker></defs>
-  </g>
-</svg>
-<div class="cap">Figure 4 — Run state machine. COPYING calls Cloud Manager; PUBLISHING drives the prod-mirror replication; failures route to NOTIFYING_FAILURE → IDLE.</div>
-</div>
-<p>Progress, per-job status and the last ~50 log lines are visible in the UI and persisted in I/O State. Content-flow status from Cloud Manager is <code>IN_PROGRESS / COMPLETED / FAILED / CANCELLED</code>.</p>
+<h2>12 · Publish to the organization catalog</h2>
+<p class="lead">A <code>devMode</code>/<code>localDevUrl</code> link is a one-shot dev side-load. For a durable, reloadable entry point in the Experience Cloud catalog, publish the app — a submission in the Developer Console followed by an org-admin approval in Adobe Exchange.</p>
 
-<div class="callout"><span class="t">Where to look when something fails</span>
-<strong>403 on the copy</strong> → AEM Administrators per-env profile missing (§2). <strong>"Backend unreachable"</strong> → auth-wrapper sequence (§4 step 2). <strong>401 everywhere</strong> → opened outside the shell, no IMS token. <strong>403 "not authorized: profile"</strong> → caller lacks an allowed Admin Console profile.</p></div>
+<div class="step"><div class="n">1</div><div class="body"><h4>Submit for approval (Developer Console)</h4>
+<p>Developer Console → <strong>Production</strong> workspace → left nav <strong>Approval</strong>. Complete the <em>App Submission Details</em> form: <strong>App title</strong> (becomes the custom URL), <strong>description</strong>, <strong>contact email</strong>, a <strong>512×512 PNG/JPG icon ≤100 kb</strong> (required), and a <strong>note to reviewer</strong> (also required). Click <strong>Submit</strong> — status becomes <em>In Review</em>.</p></div></div>
+
+<div class="step"><div class="n">2</div><div class="body"><h4>Approve as an org administrator (Adobe Exchange)</h4>
+<p>Go to <a href="https://exchange.adobe.com/manage">exchange.adobe.com/manage</a> → <strong>App Builder applications</strong>. Switch to the <strong>Private</strong> distribution tab (first-party in-org apps live there, not Public). Find your app showing <em>Pending Review</em>, click <strong>Review</strong>, then <strong>Approve</strong> (the dialog also offers Reject / Cancel). The status flips to <span class="pill ok">Approved</span> and the row's action becomes <em>Revoke</em>.</p>
+<div class="callout info"><span class="t">Who can approve</span>The submitter and the approver can be the same person if you hold the org <strong>System Administrator</strong> role; otherwise an org admin performs the Exchange approval.</div></div></div>
+
+<div class="step"><div class="n">3</div><div class="body"><h4>Result — stable catalog URL</h4>
+<p>The app appears under the org's <strong>App Builder Apps</strong> with a durable, reloadable URL (no more <code>devMode</code>):</p>
+<pre>https://experience.adobe.com/#/@&lt;org&gt;/custom-apps/&lt;namespace&gt;/</pre>
+<p>End users still need the product entitlement <em>and</em> one of the configured Admin Console profiles (Figure 2-A). To restrict who sees it, manage the Cloud Manager product profile membership in the Admin Console.</p></div></div>
+</section>
+
+<!-- ============ 13 — OPS ============ -->
+<section class="section pagebreak">
+<h2>13 · Operations &amp; troubleshooting</h2>
+
+<div class="callout warn"><span class="t">After any permission change → redeploy</span>
+The action caches the Cloud Manager token (~24 h) and IMS bakes entitlements in at <em>mint time</em>. A warm container keeps using a token minted <em>before</em> your permission change. After granting/removing a role or profile, wait for propagation, then run <code>aio app deploy</code> — the next invocation runs in a fresh container and mints a token with the updated entitlements.</div>
+
+<table>
+<tr><th>Symptom</th><th>Cause &amp; fix</th></tr>
+<tr><td><strong>403</strong> on the copy (<code>ERROR_CREATE_CONTENTFLOW</code>); listing works</td><td>The AEM Administrators per-env profile isn't in effect for the credential. Add it for the <em>source</em> and dest envs (§5 step 4), wait for propagation, <code>aio app deploy</code> (fresh token), retry.</td></tr>
+<tr><td><strong>"Backend unreachable"</strong> / the SPA's calls 404</td><td>The <code>require-adobe-auth</code> wrapper sequence wasn't created on a fresh namespace. The <code>post-app-deploy</code> hook fixes it; re-run <code>aio app deploy</code>, or recreate the <code>ui-api</code> sequence manually (see <code>docs/troubleshooting-shell-integration.md</code> §8).</td></tr>
+<tr><td><strong>401</strong> on every call</td><td>Opened outside the shell (no IMS token). Open via the catalog or the <code>devMode</code> shell URL, not the raw <code>adobeio-static.net</code> URL.</td></tr>
+<tr><td><strong>403 "not authorized: profile"</strong></td><td>The signed-in user lacks an allowed Admin Console profile. Adjust <strong>Settings → Access control</strong> or grant the user a profile.</td></tr>
+<tr><td><strong>"Failed to fetch"</strong> with a valid token</td><td>Historically a duplicated CORS header. The action must not set <code>Access-Control-*</code> — the platform owns CORS. (Already fixed in this codebase.)</td></tr>
+<tr><td><code>aio app deploy</code> auth timeout</td><td>Stale CLI login — <code>aio login</code> again.</td></tr>
+<tr><td>"Concurrent content backflows are not allowed"</td><td>A previous flow is still active (or stuck). The app's <code>CHECK_STUCK</code> phase guards this; wait for the prior flow, or cancel it in Cloud Manager.</td></tr>
+</table>
+
+<p style="margin-top:1em;font-size:9.5pt;color:var(--muted)">Full troubleshooting catalogue: <code>docs/troubleshooting-shell-integration.md</code> (shell integration, CORS, fresh-namespace auth sequence, CM credential vars, the Content Copy 403, and the token-refresh rule).</p>
 </section>
 
 <footer class="docfoot"><span>AEM Content Sync — Deployment &amp; Publishing Runbook</span><span>github.com/rwunsch/aem-content-sync · Apache-2.0</span></footer>
