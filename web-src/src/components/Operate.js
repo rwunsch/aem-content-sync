@@ -2,8 +2,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react'
 import {
   Flex, View, Heading, Text, ProgressBar, StatusLight,
   Switch, Well, ActionButton, Badge, Item, Picker,
-  MenuTrigger, Menu, Button, DialogTrigger, AlertDialog,
-  TableView, TableHeader, TableBody, Column, Row, Cell
+  MenuTrigger, Menu, Button, DialogTrigger, AlertDialog
 } from '@adobe/react-spectrum'
 import Refresh from '@spectrum-icons/workflow/Refresh'
 import { statusVariant } from './ui'
@@ -30,11 +29,12 @@ const fmtDur = (a, b) => {
 // One expandable run record (native <details> — reliable inside the SPA, no
 // extra component lib). Collapsed: status + timings + sets. Expanded: the error
 // (if failed) then the captured run log.
-function RunRecord ({ r }) {
+function RunRecord ({ r, jobName }) {
   const ok = r.status === 'SUCCEEDED'
   return (
     <details style={{ borderTop: '1px solid var(--spectrum-global-color-gray-200)', padding: '6px 0' }}>
       <summary style={{ cursor: 'pointer', fontSize: 13 }}>
+        {jobName ? <span style={{ fontWeight: 700 }}>{jobName} · </span> : null}
         <span style={{ fontWeight: 700, color: ok ? 'var(--spectrum-global-color-green-700)' : 'var(--spectrum-global-color-red-700)' }}>
           {ok ? '✓ Succeeded' : '✗ Failed'}
         </span>
@@ -165,48 +165,37 @@ export default function Operate ({ api, onHealth }) {
         </Flex>
       </Card>
 
-      {/* Last run, per job */}
-      <Card title="Last run, per job">
-        <TableView aria-label="Last run, per job" density="spacious" overflowMode="wrap">
-          <TableHeader>
-            <Column key="name">Job</Column>
-            <Column key="result" width={150}>Result</Column>
-            <Column key="when">When</Column>
-            <Column key="actions" width={90} align="end">{''}</Column>
-          </TableHeader>
-          <TableBody>
-            {jobs.map((j) => (
-              <Row key={j.id}>
-                <Cell>{j.name}{j.id === status.activeJobId ? ' (running)' : ''}{!j.enabled ? ' (disabled)' : ''}</Cell>
-                <Cell>
-                  <StatusLight margin={0} variant={statusVariant(j.status && j.status.lastStatus)}>{(j.status && j.status.lastStatus) || '—'}</StatusLight>
-                  {j.status && j.status.lastStatus === 'FAILED' && j.status.lastError &&
-                    <Text UNSAFE_style={{ display: 'block', fontSize: '11px', color: 'var(--spectrum-global-color-red-600)', whiteSpace: 'normal' }}>{j.status.lastError}</Text>}
-                </Cell>
-                <Cell>{(j.status && j.status.lastRunAt) ? new Date(j.status.lastRunAt).toLocaleString() : '—'}</Cell>
-                <Cell>{(j.status && j.status.lastStatus && j.id !== status.activeJobId)
-                  ? <ActionButton isQuiet onPress={() => doClearStatus(j.id)} isDisabled={busy} aria-label={`Clear status for ${j.name}`}>Clear</ActionButton>
-                  : ''}</Cell>
-              </Row>
-            ))}
-          </TableBody>
-        </TableView>
-        <Text UNSAFE_style={{ ...DIM, display: 'block', marginTop: 'var(--spectrum-global-dimension-size-150)' }}>A quick last-run overview. Full per-run history with logs is below.</Text>
-      </Card>
-
-      {/* Run history, per job — expandable, with logs + failure reason */}
-      <Card title="Run history">
+      {/* Last runs, per job — each job shows its recent runs (newest = last run),
+          every run expandable to its content sets, timings, log, and failure reason. */}
+      <Card title="Last runs, per job">
         <Text UNSAFE_style={{ ...DIM, display: 'block', marginBottom: 'var(--spectrum-global-dimension-size-150)' }}>
-          The last 10 runs of each job. Expand a run to see its content sets, the captured log, and any error message.
+          The most recent runs of each job, newest first. Expand a run to see its content sets, start/end time, the captured log, and the failure reason.
         </Text>
         {jobs.map((j) => {
           const hist = (status.runHistory && status.runHistory[j.id]) || []
+          const st = j.status
+          const running = j.id === status.activeJobId
           return (
-            <View key={j.id} marginBottom="size-250">
-              <Heading level={5} margin={0}>{j.name}</Heading>
-              {hist.length === 0
-                ? <Text UNSAFE_style={DIM}>No completed runs recorded yet.</Text>
-                : hist.map((r, i) => <RunRecord key={i} r={r} />)}
+            <View key={j.id} marginBottom="size-300">
+              <Flex direction="row" justifyContent="space-between" alignItems="center" gap="size-100" wrap>
+                <Heading level={5} margin={0}>
+                  {j.name}{running ? ' (running)' : ''}{!j.enabled ? ' (disabled)' : ''}
+                </Heading>
+                {(hist.length > 0 || (st && st.lastStatus)) && !running &&
+                  <ActionButton isQuiet onPress={() => doClearStatus(j.id)} isDisabled={busy} aria-label={`Clear history for ${j.name}`}>Clear</ActionButton>}
+              </Flex>
+              {hist.length > 0
+                ? hist.map((r, i) => <RunRecord key={i} r={r} jobName={j.name} />)
+                : (st && st.lastStatus)
+                    ? (
+                      <Flex direction="row" gap="size-100" alignItems="center" wrap>
+                        <StatusLight margin={0} variant={statusVariant(st.lastStatus)}>{st.lastStatus}</StatusLight>
+                        <Text UNSAFE_style={DIM}>{st.lastRunAt ? new Date(st.lastRunAt).toLocaleString() : ''}</Text>
+                        {st.lastStatus === 'FAILED' && st.lastError &&
+                          <Text UNSAFE_style={{ fontSize: '12px', color: 'var(--spectrum-global-color-red-600)', whiteSpace: 'normal' }}>{st.lastError}</Text>}
+                      </Flex>
+                      )
+                    : <Text UNSAFE_style={DIM}>No runs recorded yet.</Text>}
             </View>
           )
         })}
