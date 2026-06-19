@@ -264,6 +264,37 @@ propagation, then `aio app deploy`, then retry.
 
 ---
 
+## 12. Published app: `aio app deploy` silently skips Production
+
+**Symptom:** you run `aio app deploy` on the Production workspace, it reports *"Successful
+deployment"*, but the live code never changes — a feature you just added doesn't appear, and the
+deployed action still behaves like the old version.
+
+**Root cause:** once the app is **published** to the org catalog, `aio app deploy` deliberately
+**skips** deploying to the Production workspace to protect the live, approved app. The skip is
+easy to miss — the log line is buried:
+
+```
+ℹ This application is published and the current workspace is Production, deployment will be
+  skipped. You must first retract this application in Adobe Exchange to deploy updates.
+```
+
+**Fix:** deploy updates with the force flag — this pushes the new code to the namespace without
+disturbing the approved catalog listing (no re-approval needed):
+
+```
+aio app deploy --force-deploy
+```
+
+(Or retract the app in Adobe Exchange first, deploy normally, then re-submit — slower.)
+
+> Verifying what's actually deployed: the action is a **binary (zip) action** (`exec.binary:
+> true`), so `GET …/actions/<pkg>/<action>?code=true` returns **base64**, not readable JS —
+> grepping it for a source string always fails. To truly check, base64-decode the `exec.code`,
+> unzip it, and grep the bundled `index.js`. (Or just exercise the feature and confirm behaviour.)
+
+---
+
 ## Security posture (kept throughout)
 
 - `ui-api` is a web action with `require-adobe-auth: true` → anonymous calls get

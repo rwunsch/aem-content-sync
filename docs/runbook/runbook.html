@@ -318,6 +318,7 @@ aio app use -w Production --overwrite --no-input    <span class="c"># rewrites .
 <div class="callout warn"><span class="t">Fresh-namespace gotcha (auto-healed)</span>On a brand-new namespace the deploy can create the inner <code>__secured_ui-api</code> action but skip the <code>require-adobe-auth</code> <code>ui-api</code> <em>wrapper sequence</em> → the SPA's calls 404 → UI shows "backend unreachable." The bundled <code>post-app-deploy</code> hook (<code>scripts/ensure-auth-sequence.js</code>) re-creates it automatically after every deploy.</div></div></div>
 <div class="step"><div class="n">4</div><div class="body"><h4>Seed the Production configuration &amp; test</h4>
 <p>The Production namespace starts empty — repeat §8 (Service Credentials, job, access control) and §10 (test) there. It has its own I/O State, independent of Stage.</p></div></div>
+<div class="callout warn"><span class="t">Updating an already-published app</span>After the app is published (§12), <code>aio app deploy</code> will <strong>skip</strong> deploying to Production to protect the live app. Push later code/config updates with <code>aio app deploy --force-deploy</code> — the catalog listing stays approved; only the namespace code updates. (No re-approval needed.)</div>
 </section>
 
 <!-- ============ 12 — CATALOG PUBLISH ============ -->
@@ -353,6 +354,7 @@ The action caches the Cloud Manager token (~24 h) and IMS bakes entitlements in 
 <tr><td><strong>403 "not authorized: profile"</strong></td><td>The signed-in user lacks an allowed Admin Console profile. Adjust <strong>Settings → Access control</strong> or grant the user a profile.</td></tr>
 <tr><td><strong>"Failed to fetch"</strong> with a valid token</td><td>Historically a duplicated CORS header. The action must not set <code>Access-Control-*</code> — the platform owns CORS. (Already fixed in this codebase.)</td></tr>
 <tr><td><code>aio app deploy</code> auth timeout</td><td>Stale CLI login — <code>aio login</code> again.</td></tr>
+<tr><td><strong>Deploy silently "skipped"</strong> on Production; code doesn't update</td><td>Once the app is <strong>published</strong>, <code>aio app deploy</code> refuses to update the Production workspace ("deployment will be skipped … retract … to deploy updates"). Deploy updates with <code>aio app deploy --force-deploy</code> (no re-approval needed; the catalog listing is unaffected) — or retract in Adobe Exchange first.</td></tr>
 <tr><td>"Concurrent content backflows are not allowed"</td><td>A previous flow is still active (or stuck). The app's <code>CHECK_STUCK</code> phase guards this; wait for the prior flow, or cancel it in Cloud Manager.</td></tr>
 </table>
 
