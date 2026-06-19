@@ -15,7 +15,7 @@
 
 const stateLib = require('@adobe/aio-lib-state')
 
-const { PHASES, getState, getJobStatusMap, setQueue, setJobStatus, clearJobStatus, resetRun, resetState } = require('../utils/state')
+const { PHASES, getState, getJobStatusMap, getRunHistory, setQueue, setJobStatus, clearJobStatus, resetRun, resetState } = require('../utils/state')
 const { getEffectiveConfig, saveConfigOverride, getAutoEnabled, setAutoEnabled, jobPublishPaths, normaliseAccessProfiles } = require('../utils/config')
 const { assertAuthorized, callerProfiles, matches } = require('../utils/authz')
 const { listRunningFlows, cancelContentFlow, listPrograms, listEnvironments, listContentSets } = require('../utils/cm-api')
@@ -86,6 +86,7 @@ async function main (params) {
         const config = await getEffectiveConfig(store)
         const autoEnabled = await getAutoEnabled(store)
         const jobStatus = await getJobStatusMap(store)
+        const runHistory = await getRunHistory(store)
         // Attach per-job last-run status to each configured job.
         const jobs = config.jobs.map(j => ({ ...j, status: jobStatus[j.id] || null }))
         return res({
@@ -103,7 +104,8 @@ async function main (params) {
           autoEnabled,
           running: st.phase !== PHASES.IDLE,
           config: maskConfig(config),
-          jobs
+          jobs,
+          runHistory
         })
       }
 

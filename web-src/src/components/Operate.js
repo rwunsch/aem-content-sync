@@ -18,6 +18,48 @@ const phaseProgress = (p) => { const i = PHASE_ORDER.indexOf(p); return i < 0 ? 
 
 const DIM = { color: 'var(--spectrum-global-color-gray-600)' }
 
+const fmtTime = (iso) => (iso ? new Date(iso).toLocaleString() : '—')
+const fmtDur = (a, b) => {
+  if (!a || !b) return ''
+  const ms = new Date(b) - new Date(a)
+  if (!(ms >= 0)) return ''
+  const s = Math.round(ms / 1000)
+  return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`
+}
+
+// One expandable run record (native <details> — reliable inside the SPA, no
+// extra component lib). Collapsed: status + timings + sets. Expanded: the error
+// (if failed) then the captured run log.
+function RunRecord ({ r }) {
+  const ok = r.status === 'SUCCEEDED'
+  return (
+    <details style={{ borderTop: '1px solid var(--spectrum-global-color-gray-200)', padding: '6px 0' }}>
+      <summary style={{ cursor: 'pointer', fontSize: 13 }}>
+        <span style={{ fontWeight: 700, color: ok ? 'var(--spectrum-global-color-green-700)' : 'var(--spectrum-global-color-red-700)' }}>
+          {ok ? '✓ Succeeded' : '✗ Failed'}
+        </span>
+        {' · '}{fmtTime(r.startedAt)}{r.endedAt ? ` → ${fmtTime(r.endedAt)}` : ''}
+        {fmtDur(r.startedAt, r.endedAt) ? ` (${fmtDur(r.startedAt, r.endedAt)})` : ''}
+        {Array.isArray(r.sets) && r.sets.length ? ` · sets: ${r.sets.join(', ')}` : ''}
+        {r.published != null ? ` · published ${r.published}` : ''}{r.errors ? `, errors ${r.errors}` : ''}
+      </summary>
+      <div style={{ marginTop: 6 }}>
+        {!ok && r.error && (
+          <div style={{ background: 'var(--spectrum-global-color-red-100)', color: 'var(--spectrum-global-color-red-700)', padding: '6px 8px', borderRadius: 4, marginBottom: 6, fontFamily: 'monospace', fontSize: 12, whiteSpace: 'pre-wrap' }}>
+            {r.error}
+          </div>
+        )}
+        <div style={{ maxHeight: 240, overflowY: 'auto', background: 'var(--spectrum-global-color-gray-75)', padding: '6px 8px', borderRadius: 4 }}>
+          {(r.log && r.log.length)
+            ? r.log.slice().reverse().map((line, i) => (
+              <div key={i} style={{ fontFamily: 'monospace', fontSize: 12, whiteSpace: 'pre-wrap' }}>{line}</div>))
+            : <Text>No log captured for this run.</Text>}
+        </div>
+      </div>
+    </details>
+  )
+}
+
 export default function Operate ({ api, onHealth }) {
   const [status, setStatus] = useState(null)
   const [error, setError] = useState(null)
@@ -136,7 +178,11 @@ export default function Operate ({ api, onHealth }) {
             {jobs.map((j) => (
               <Row key={j.id}>
                 <Cell>{j.name}{j.id === status.activeJobId ? ' (running)' : ''}{!j.enabled ? ' (disabled)' : ''}</Cell>
-                <Cell><StatusLight margin={0} variant={statusVariant(j.status && j.status.lastStatus)}>{(j.status && j.status.lastStatus) || '—'}</StatusLight></Cell>
+                <Cell>
+                  <StatusLight margin={0} variant={statusVariant(j.status && j.status.lastStatus)}>{(j.status && j.status.lastStatus) || '—'}</StatusLight>
+                  {j.status && j.status.lastStatus === 'FAILED' && j.status.lastError &&
+                    <Text UNSAFE_style={{ display: 'block', fontSize: '11px', color: 'var(--spectrum-global-color-red-600)', whiteSpace: 'normal' }}>{j.status.lastError}</Text>}
+                </Cell>
                 <Cell>{(j.status && j.status.lastRunAt) ? new Date(j.status.lastRunAt).toLocaleString() : '—'}</Cell>
                 <Cell>{(j.status && j.status.lastStatus && j.id !== status.activeJobId)
                   ? <ActionButton isQuiet onPress={() => doClearStatus(j.id)} isDisabled={busy} aria-label={`Clear status for ${j.name}`}>Clear</ActionButton>
@@ -145,7 +191,25 @@ export default function Operate ({ api, onHealth }) {
             ))}
           </TableBody>
         </TableView>
-        <Text UNSAFE_style={{ ...DIM, display: 'block', marginTop: 'var(--spectrum-global-dimension-size-150)' }}>Run history — edit jobs in Configure.</Text>
+        <Text UNSAFE_style={{ ...DIM, display: 'block', marginTop: 'var(--spectrum-global-dimension-size-150)' }}>A quick last-run overview. Full per-run history with logs is below.</Text>
+      </Card>
+
+      {/* Run history, per job — expandable, with logs + failure reason */}
+      <Card title="Run history">
+        <Text UNSAFE_style={{ ...DIM, display: 'block', marginBottom: 'var(--spectrum-global-dimension-size-150)' }}>
+          The last 10 runs of each job. Expand a run to see its content sets, the captured log, and any error message.
+        </Text>
+        {jobs.map((j) => {
+          const hist = (status.runHistory && status.runHistory[j.id]) || []
+          return (
+            <View key={j.id} marginBottom="size-250">
+              <Heading level={5} margin={0}>{j.name}</Heading>
+              {hist.length === 0
+                ? <Text UNSAFE_style={DIM}>No completed runs recorded yet.</Text>
+                : hist.map((r, i) => <RunRecord key={i} r={r} />)}
+            </View>
+          )
+        })}
       </Card>
 
       {/* Run log */}

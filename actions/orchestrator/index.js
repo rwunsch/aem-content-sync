@@ -17,7 +17,7 @@
 
 const {
   KEYS, PHASES, getState, setState, appendLog,
-  getQueue, setQueue, getLastTick, setLastTick, setJobStatus, resetRun
+  getQueue, setQueue, getLastTick, setLastTick, setJobStatus, appendRunHistory, resetRun
 } = require('../utils/state')
 const { startContentFlow, getContentFlowStatus, listRunningFlows, cancelContentFlow } = require('../utils/cm-api')
 const { startTreeActivation, getWorkflowStatus, startBulkPublish, getBulkPublishStatus, AEMAACS_AUTHOR, getActivatedPaths, getCsrfToken, replicatePaths } = require('../utils/aem-api')
@@ -563,6 +563,29 @@ async function handleNotify (params, store, config, st, success) {
   } catch (e) {
     console.error('[orchestrator] Notification failed:', e)
     await appendLog(store, log, `Notification failed: ${e.message}`)
+  }
+
+  // Record this completed run in the per-job history (newest-first, capped) so
+  // the UI can show every run's timings, content sets, status, and — crucially —
+  // the failure reason / log, long after the live run state is reset below.
+  try {
+    const sets = (st.runSets || []).map((cs) => {
+      const p = (cs.paths && cs.paths[0]) || cs.path || ''
+      return cs.id ? (p ? `${cs.id} (${p})` : String(cs.id)) : p
+    }).filter(Boolean)
+    await appendRunHistory(store, activeJobId, {
+      runId,
+      startedAt: startedAt || runId,
+      endedAt: new Date().toISOString(),
+      status: success ? 'SUCCEEDED' : 'FAILED',
+      sets,
+      published: (st.runPublished != null) ? st.runPublished : null,
+      errors: (st.runErrors != null) ? st.runErrors : null,
+      error: success ? null : (log[log.length - 1] || 'Unknown error'),
+      log: (log || []).slice(-50)
+    })
+  } catch (e) {
+    console.error('[orchestrator] Failed to record run history:', e)
   }
 
   await resetRun(store)

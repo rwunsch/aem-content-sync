@@ -24,6 +24,7 @@ const KEYS = {
   RUN_ERRORS: 'sync_runErrors',
   PROD_MIRROR_PROGRESS: 'sync_prodMirrorProgress', // incremental prod-mirror cursor (survives self-chain)
   JOB_STATUS: 'sync_jobStatus', // map: jobId -> { lastRunAt, lastStatus, lastRunId, lastError }
+  RUN_HISTORY: 'sync_runHistory', // map: jobId -> [ {runId,startedAt,endedAt,status,sets,published,errors,error,log} ] newest-first, capped
   LAST_TICK: 'sync_lastTick' // last scheduler evaluation time (ms)
 }
 
@@ -117,6 +118,26 @@ async function clearJobStatus (store, jobId) {
   const map = await getJobStatusMap(store)
   if (jobId) { delete map[jobId] } else { for (const k of Object.keys(map)) delete map[k] }
   await store.put(KEYS.JOB_STATUS, JSON.stringify(map), { ttl: LONG_TTL })
+  // Also drop the matching run history so "Clear" wipes both the badge and the log.
+  const hist = await getRunHistory(store)
+  if (jobId) { delete hist[jobId] } else { for (const k of Object.keys(hist)) delete hist[k] }
+  await store.put(KEYS.RUN_HISTORY, JSON.stringify(hist), { ttl: LONG_TTL })
+  return map
+}
+
+// Per-job run history: a rolling, newest-first list of completed runs (success
+// or failure) with timings, content sets, and a snapshot of the run log so the
+// reason for a failure is always recoverable. Capped per job.
+const RUN_HISTORY_MAX = 10
+async function getRunHistory (store) {
+  return JSON.parse((await store.get(KEYS.RUN_HISTORY))?.value || '{}')
+}
+async function appendRunHistory (store, jobId, record) {
+  if (!jobId) return
+  const map = await getRunHistory(store)
+  const list = Array.isArray(map[jobId]) ? map[jobId] : []
+  map[jobId] = [record, ...list].slice(0, RUN_HISTORY_MAX)
+  await store.put(KEYS.RUN_HISTORY, JSON.stringify(map), { ttl: LONG_TTL })
   return map
 }
 
@@ -155,6 +176,7 @@ async function resetState (store) {
 
 module.exports = {
   KEYS, PHASES, getStore, getState, setState, appendLog,
-  getJobStatusMap, setJobStatus, clearJobStatus, getQueue, setQueue, getLastTick, setLastTick,
+  getJobStatusMap, setJobStatus, clearJobStatus, getRunHistory, appendRunHistory,
+  getQueue, setQueue, getLastTick, setLastTick,
   resetRun, resetState
 }
