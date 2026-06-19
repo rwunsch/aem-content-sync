@@ -47,6 +47,21 @@ sense where the destination already carries activation state.)
 
 ---
 
+## Operate — run history
+
+The **Operate** tab shows **Last runs, per job**: the most recent runs of each job (newest
+first), with status, start/end time, duration, content sets, and published count.
+
+![Run history — per-job list of recent runs](docs/screenshots/run-history-overview.png)
+
+Expand any run to see its content sets, timings, the captured log, and — for a failed run —
+the **failure reason** (e.g. an unconfigured content-set row), so you never have to guess why a
+run failed:
+
+![Run history — expanded run showing the log and failure reason](docs/screenshots/run-history-expanded.png)
+
+---
+
 > 📘 **Prefer a printable, step-by-step guide?** See **[`docs/runbook/runbook.pdf`](docs/runbook/runbook.pdf)** —
 > a deployment &amp; publishing runbook with the permission model and flow diagrams. The sections below are the same material in Markdown.
 
