@@ -295,6 +295,96 @@ aio app deploy --force-deploy
 
 ---
 
+## 13. "Can't reach Cloud Manager" in Settings — no environment list, content-set picker empty
+
+**Symptom:** the app's **Settings → Setup status** shows *"Cloud Manager integration: Can't
+reach Cloud Manager,"* the environment list for the program is empty, and the **Configure**
+tab can't list content sets (it falls back to a manual *Content set ID* text field).
+
+**Root cause:** the readiness light is driven by whether the app could list the program's
+environments over Cloud Manager. An empty list means the Cloud Manager call failed. Two usual
+causes: (a) the OAuth S2S credential is missing the **Developer – Cloud Service** (read) and/or
+**Deployment Manager** product profile; or (b) — most common after a rebuild or a workspace
+switch — the deployed action has no credential values because `aio app use` writes the IMS
+context but **not** the `IMS_ORG_ID` / `CM_CLIENT_ID` / `CM_CLIENT_SECRET` action inputs (see §9).
+
+**Fix:** confirm the credential's profiles, then ensure the three convenience vars are set in
+`.env` (deriving them from the `AIO_ims_contexts_…` lines, stripping the brackets on the secret)
+and **redeploy**. Verify the credential independently with a `client_credentials` POST to
+`https://ims-na1.adobelogin.com/ims/token/v3` → a 200 with an `access_token`. Once the call
+succeeds the light flips to *"Connected — reaching Cloud Manager,"* the environment list
+populates, and the content-set picker resolves names → ids automatically (§15).
+
+---
+
+## 14. Technical-account user not found in AEM / Admin Console until the first authenticated call
+
+**Symptom:** you paste an environment's **Service Credentials (JWT)** to enable the prod-mirror
+publish step, then go to grant that technical account replication rights — but it isn't in the
+AEM instance's user list, and you can't find it in the Admin Console to add to a group.
+
+**Root cause:** the AEM technical-account user is **provisioned by JWT SSO on its first
+authenticated login**. Until the app has authenticated to that environment at least once, the
+user simply does not exist there yet — so searching for it returns nothing.
+
+**Fix:** order of operations matters:
+
+1. In the app's **Settings**, paste the environment's Service Credentials JSON and **Save**.
+2. Click **Check credentials** — this exchanges the JWT and authenticates, which provisions the
+   technical-account user in that instance.
+3. *Now* grant it replication rights: in AEM (Tools → Security → Users/Groups) add it to a group
+   with `crx:replicate` on the publish paths (least privilege preferred), or to the environment's
+   `AEM Administrators` profile.
+
+Note the two separate grants: the **Cloud Manager OAuth credential** needs the per-environment
+`AEM Administrators` profile for the **copy** (§10); the **JWT technical account** needs
+**replication** rights for the **publish** step — different identity, different permission. In
+the Admin Console you add the **API credential** to the product profile; you do not search for a
+human user by email.
+
+---
+
+## 15. Content set shows a name in the console but the app/API need the id
+
+**Symptom:** Cloud Manager's UI lists content sets by **name**, but the job needs a content-set
+**id**, and it isn't obvious where to get it.
+
+**Root cause:** content sets are keyed by id in the Cloud Manager API and in the app's job
+config; the console surfaces the name. When the program's sets have loaded, the **Configure**
+picker shows each set as `name (id)` and fills its root paths read-only — no id-hunting needed.
+The manual *Content set ID* text field only appears as a **fallback when the set list could not
+be loaded**, which is itself a sign that Cloud Manager isn't reachable (§13).
+
+**Fix:** get Cloud Manager reachable (§13) and use the picker. To read ids directly (e.g. for
+scripting or while debugging), call:
+
+```
+GET https://cm.adobe.io/api/program/<programId>/contentSets
+```
+
+The JSON carries both `id` and `name` for every set.
+
+---
+
+## 16. App "disappears" on a browser refresh (opened via the devMode / localDevUrl link)
+
+**Symptom:** the app opens fine from the `?devMode=true…&localDevUrl=…` (or `aio app dev`) URL,
+but **refreshing the page loses the app** — even re-pasting the original URL doesn't reliably
+bring it back.
+
+**Root cause:** that URL is a **one-shot dev side-load**. The Experience Cloud shell holds the
+app only for that session; a refresh drops the query parameters the shell needs to re-attach the
+local/staged app, so it appears to vanish. It is not a fault in the build.
+
+**Fix:** for a durable, reloadable entry point, **publish the app to the org's App Builder
+catalog** (runbook §11–§12): deploy to the Production workspace, submit for approval in the
+Developer Console, and approve it in Adobe Exchange (Private tab). The app then lives at a stable
+URL — `experience.adobe.com/#/@<org>/custom-apps/<namespace>/` — that survives refreshes and is
+reachable from the Experience Cloud app launcher. Until then, always open it through the shell
+link, never the raw `adobeio-static.net` URL.
+
+---
+
 ## Security posture (kept throughout)
 
 - `ui-api` is a web action with `require-adobe-auth: true` → anonymous calls get

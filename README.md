@@ -115,7 +115,13 @@ endpoints reject the OAuth S2S token).
 3. In the **Stage** workspace → **Add API** and add:
    - **Cloud Manager** (required — content copy)
    - **I/O Management API** (required — App Builder deploy/registration)
-   - **State** (and **Files** if you extend storage) — used by the orchestrator's state machine
+   - **State** (and **Files** if you extend storage) — used by the orchestrator's state machine.
+     These are App Builder **runtime** services bound to your namespace, not Experience-Cloud API
+     products: `aio-lib-state` initialises from the namespace credentials. If the **Add API**
+     catalog does not surface a clickable **State**/**Files** card, that is expected — add the
+     `StateSDK` service by code (see the CLI alternative below) or simply proceed; the libraries
+     bind to the namespace on deploy. Don't treat a missing State card as a blocker.
+
    When prompted for credential type, choose **OAuth Server-to-Server**. This creates the
    single S2S credential the app uses for Cloud Manager. Note its **Client ID**,
    **Client Secret**, **Technical Account ID**, and the **Org ID**.
